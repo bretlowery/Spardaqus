@@ -1,4 +1,3 @@
-from collections import Counter
 import datetime
 import os
 from pathlib import Path
@@ -10,47 +9,6 @@ import uuid
 import yaml
 
 from spextral import globals
-
-
-def nowstr():
-    """Returns the current datetime in YYYYMMDDHHMMSS format as a string."""
-    return datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-
-
-def nowint():
-    """Returns the current datetime in YYYYMMDDHHMMSS format as an integer."""
-    return int(nowstr())
-
-
-def xlatearg(argval):
-    """ Normalize multiple argument values to a single canonical value.
-    Allows acceptible variants that mean the same thing: e.g., analyze or analysis --> analyze."""
-    arg = argval.strip().lower()
-    if arg in ["analyze", "analysis"]:
-        arg = "analyze"
-    return arg
-
-
-def mergedicts(a, b, path=None, overwrite=False):
-    """ Merges dict a and dict b, returning the merged results into dict a.
-    e.g. a={'x':1, 'y':2} and b={'z':3, 'q':4} --> a={'x':1, 'y':2, 'z':3, 'q':4}.
-    Merge keys example: e.g. a={'x':1, 'y':2} and b={'y':3, 'q':4} --> a={'x':1, 'y':3, 'q':4} [if overwrite=True], OR an exception [if overwrite=False].
-    """
-    if path is None:
-        path = []
-    for key in b:
-        if key in a:
-            if isinstance(a[key], dict) and isinstance(b[key], dict):
-                mergedicts(a[key], b[key], path + [str(key)])
-            elif a[key] == b[key]:
-                pass  # same leaf value
-            elif overwrite:
-                a[key] = b[key]
-            else:
-                raise KeyError('Duplicate dictionary keys at %s' % '.'.join(path + [str(key)]))
-        else:
-            a[key] = b[key]
-    return a
 
 
 def _getsetyaml(fname,
@@ -145,6 +103,43 @@ def _getsetyaml(fname,
     return val
 
 
+def _m(x):
+    return str(round(x / 1024.0 / globals.RSS_MEMORY_DIVISOR, 3))
+
+
+def boolish(val):
+    """ Returns True if the passed val is T, True, Y, Yes, or a boolean True.
+    Returns False if the passed val is F, False, N, No. Otherwise, returns val. Ignores case."""
+    if isinstance(val, str):
+        return {
+            't': True,
+            'true': True,
+            'y': True,
+            'yes': True,
+            'f': False,
+            'false': False,
+            'n': False,
+            'no': False
+        }.get(str(val).strip().lower(), val)
+    else:
+        return val
+
+
+def containsdupevalues(structure):
+    """Returns True if the passed dict has duplicate items/values, False otherwise. If the passed structure is not a dict, returns None."""
+    if isinstance(structure, dict):
+        # fast check for dupe keys
+        rev_dict = {}
+        for key, value in structure.items():
+            rev_dict.setdefault(value, set()).add(key)
+        dupes = list(filter(lambda x: len(x) > 1, rev_dict.values()))
+        if dupes:
+            return True
+        else:
+            return False
+    return None
+
+
 def debugging():
     """ Returns True if running in a IDE's debugging environment/mode, False otherwise."""
     return sys.gettrace() is not None
@@ -208,24 +203,6 @@ def info(msg):
         printmsg(msg)
 
 
-def boolish(val):
-    """ Returns True if the passed val is T, True, Y, Yes, or a boolean True.
-    Returns False if the passed val is F, False, N, No. Otherwise, returns val. Ignores case."""
-    if isinstance(val, str):
-        return {
-            't': True,
-            'true': True,
-            'y': True,
-            'yes': True,
-            'f': False,
-            'false': False,
-            'n': False,
-            'no': False
-        }.get(str(val).strip().lower(), val)
-    else:
-        return val
-
-
 def istruthy(val):
     """ Returns True if the passed val is T, True, Y, Yes, 1, or boolean True.
     Returns False if the passed val is boolean False or a string that is not T, True, Y, Yes, or 1, or an integer that is not 1.
@@ -263,96 +240,36 @@ def iswritable(path):
     return False
 
 
-def printmsg(msg):
-    """Print text to stdout."""
-    print(msg, file=sys.stdout)
-    sys.stdout.flush()
+def mergedicts(a, b, path=None, overwrite=False):
+    """ Merges dict a and dict b, returning the merged results into dict a.
+    e.g. a={'x':1, 'y':2} and b={'z':3, 'q':4} --> a={'x':1, 'y':2, 'z':3, 'q':4}.
+    Merge keys example: e.g. a={'x':1, 'y':2} and b={'y':3, 'q':4} --> a={'x':1, 'y':3, 'q':4} [if overwrite=True], OR an exception [if overwrite=False].
+    """
+    if path is None:
+        path = []
+    for key in b:
+        if key in a:
+            if isinstance(a[key], dict) and isinstance(b[key], dict):
+                mergedicts(a[key], b[key], path + [str(key)])
+            elif a[key] == b[key]:
+                pass  # same leaf value
+            elif overwrite:
+                a[key] = b[key]
+            else:
+                raise KeyError('Duplicate dictionary keys at %s' % '.'.join(path + [str(key)]))
+        else:
+            a[key] = b[key]
+    return a
 
 
-def _m(x):
-    return str(round(x / 1024.0 / globals.RSS_MEMORY_DIVISOR, 3))
+def nowstr():
+    """Returns the current datetime in YYYYMMDDHHMMSS format as a string."""
+    return datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
 
-def profile_memory():
-    """Take an available memory measurement. If larger than the current value of globals.MAX_RSS_MEMORY_USED,
-    replace globals.MAX_RSS_MEMORY_USED with the new value. At EOP, globals.MAX_RSS_MEMORY_USED will contain
-    the largest point in time amount of memory used by Spextral."""
-    curr_mem_used = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - globals.RSS_MEMORY_BASE
-    if curr_mem_used > globals.MAX_RSS_MEMORY_USED:
-        globals.MAX_RSS_MEMORY_USED = curr_mem_used
-    if globals.LAST_RSS_MEMORY_USED == 0:
-        info("--profile: memory in use: %s MB so far" % _m(curr_mem_used))
-    else:
-        pct_change = str(round((curr_mem_used - globals.LAST_RSS_MEMORY_USED) / globals.LAST_RSS_MEMORY_USED * 100.0, 2))
-        if curr_mem_used > globals.LAST_RSS_MEMORY_USED:
-            pct_change = "+%s%%; " % pct_change
-            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
-                 (_m(curr_mem_used),
-                  pct_change,
-                  _m(globals.MAX_RSS_MEMORY_USED)))
-        elif curr_mem_used < globals.LAST_RSS_MEMORY_USED:
-            pct_change = "%s%%; " % pct_change
-            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
-                 (_m(curr_mem_used),
-                  pct_change,
-                  _m(globals.MAX_RSS_MEMORY_USED)))
-    globals.LAST_RSS_MEMORY_USED = curr_mem_used
-
-
-def setconfig(filename, sectionname, settingname, newvalue):
-    """ Sets Spextral yaml-resident config values at runtime. May be overridden in SpextralIntegration and its subclasses."""
-    return _getsetyaml(filename, sectionname, settingname, newvalue)
-
-
-def sequalsci(val, compareto):
-    """Takes two strings, lowercases them, and returns True if they are equal, False otherwise."""
-    if isinstance(val, str):
-        return val.lower() == compareto.lower()
-    else:
-        return False
-
-
-def slower(val):
-    """If the passed val is a string, returns its lowercased representation. Returns the passed val unchanged otherwise."""
-    if isinstance(val, str):
-        return val.lower()
-    else:
-        return val
-
-
-def sstrip(val):
-    """If the passed val is a string, returns its whitespace-stripped representation. Returns the passed val unchanged otherwise."""
-    if isinstance(val, str):
-        return val.strip()
-    else:
-        return val
-
-
-def supper(val):
-    """If the passed val is a string, returns its uppercased representation. Returns the passed val unchanged otherwise."""
-    if isinstance(val, str):
-        return val.upper()
-    else:
-        return val
-
-
-def wipe(file):
-    """Deletes the passed filename."""
-    if os.path.isfile(file):
-        os.unlink(file)
-
-
-def tmpfile():
-    """Generates a random file name, creates the file in /tmp, and returns the filespec to the caller."""
-    file = '/tmp/%s.spx' % str(uuid.uuid4())
-    #wipe(file)
-    Path(file).touch()
-    return file
-
-#
-# def getoperationname(inspect_stack):
-#     s = inspect_stack[0].filename.split("/")
-#     return s[len(s) - 2].lower()
+def nowint():
+    """Returns the current datetime in YYYYMMDDHHMMSS format as an integer."""
+    return int(nowstr())
 
 
 def numcpus():
@@ -467,17 +384,93 @@ def numcpus():
 
     return 1
 
+def printmsg(msg):
+    """Print text to stdout."""
+    print(msg, file=sys.stdout)
+    sys.stdout.flush()
 
-def containsdupevalues(structure):
-    """Returns True if the passed dict has duplicate items/values, False otherwise. If the passed structure is not a dict, returns None."""
-    if isinstance(structure, dict):
-        # fast check for dupe keys
-        rev_dict = {}
-        for key, value in structure.items():
-            rev_dict.setdefault(value, set()).add(key)
-        dupes = list(filter(lambda x: len(x) > 1, rev_dict.values()))
-        if dupes:
-            return True
-        else:
-            return False
-    return None
+
+def profile_memory():
+    """Take an available memory measurement. If larger than the current value of globals.MAX_RSS_MEMORY_USED,
+    replace globals.MAX_RSS_MEMORY_USED with the new value. At EOP, globals.MAX_RSS_MEMORY_USED will contain
+    the largest point in time amount of memory used by Spextral."""
+    curr_mem_used = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - globals.RSS_MEMORY_BASE
+    if curr_mem_used > globals.MAX_RSS_MEMORY_USED:
+        globals.MAX_RSS_MEMORY_USED = curr_mem_used
+    if globals.LAST_RSS_MEMORY_USED == 0:
+        info("--profile: memory in use: %s MB so far" % _m(curr_mem_used))
+    else:
+        pct_change = str(round((curr_mem_used - globals.LAST_RSS_MEMORY_USED) / globals.LAST_RSS_MEMORY_USED * 100.0, 2))
+        if curr_mem_used > globals.LAST_RSS_MEMORY_USED:
+            pct_change = "+%s%%; " % pct_change
+            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
+                 (_m(curr_mem_used),
+                  pct_change,
+                  _m(globals.MAX_RSS_MEMORY_USED)))
+        elif curr_mem_used < globals.LAST_RSS_MEMORY_USED:
+            pct_change = "%s%%; " % pct_change
+            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
+                 (_m(curr_mem_used),
+                  pct_change,
+                  _m(globals.MAX_RSS_MEMORY_USED)))
+    globals.LAST_RSS_MEMORY_USED = curr_mem_used
+
+
+def setconfig(filename, sectionname, settingname, newvalue):
+    """ Sets Spextral yaml-resident config values at runtime. May be overridden in SpextralIntegration and its subclasses."""
+    return _getsetyaml(filename, sectionname, settingname, newvalue)
+
+
+def sequalsci(val, compareto):
+    """Takes two strings, lowercases them, and returns True if they are equal, False otherwise."""
+    if isinstance(val, str):
+        return val.lower() == compareto.lower()
+    else:
+        return False
+
+
+def slower(val):
+    """If the passed val is a string, returns its lowercased representation. Returns the passed val unchanged otherwise."""
+    if isinstance(val, str):
+        return val.lower()
+    else:
+        return val
+
+
+def sstrip(val):
+    """If the passed val is a string, returns its whitespace-stripped representation. Returns the passed val unchanged otherwise."""
+    if isinstance(val, str):
+        return val.strip()
+    else:
+        return val
+
+
+def supper(val):
+    """If the passed val is a string, returns its uppercased representation. Returns the passed val unchanged otherwise."""
+    if isinstance(val, str):
+        return val.upper()
+    else:
+        return val
+
+
+def tmpfile():
+    """Generates a random file name, creates the file in /tmp, and returns the filespec to the caller."""
+    file = '/tmp/%s.spx' % str(uuid.uuid4())
+    #wipe(file)
+    Path(file).touch()
+    return file
+
+
+def wipe(file):
+    """Deletes the passed filename."""
+    if os.path.isfile(file):
+        os.unlink(file)
+
+
+def xlatearg(argval):
+    """ Normalize multiple argument values to a single canonical value.
+    Allows acceptible variants that mean the same thing: e.g., analyze or analysis --> analyze."""
+    arg = argval.strip().lower()
+    if arg in ["analyze", "analysis"]:
+        arg = "analyze"
+    return arg
