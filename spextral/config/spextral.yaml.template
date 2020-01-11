@@ -1,0 +1,11 @@
+spextral:
+  config:
+    enabled: true
+    haltonerror: true
+    logerrors: true
+    loginfo: true
+    encoding: utf-8
+  redis:
+    host: localhost
+    port: 6379
+    db: 0

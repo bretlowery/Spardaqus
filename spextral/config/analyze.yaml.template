@@ -1,0 +1,21 @@
+spextral:
+  analyze:
+    endpoint: spark
+    transport: kafka
+  spark:
+    home: /opt/spark/spark
+    pyspark.python: /usr/local/bin/python3
+    pyspark.driver.python: /usr/local/bin/python3
+    master: local[*]  #  Master must either be yarn, spark, mesos, k8s, or local[n]
+    sparkcontext.options: {}
+    autoconfigurehadoop: True
+  kafka:
+    bootstrap.servers: localhost:9092
+    topic: default
+    consumer.options: { 'group.id': 1,
+      # 'security.protocol': 'ssl',
+      # 'ssl.ca.location': 'ca-cert',
+      # 'ssl.certificate.location': 'cert-signed',
+      # 'ssl.key.location': 'ca-key',
+      # 'ssl.key.password': 'test1234'
+    }
