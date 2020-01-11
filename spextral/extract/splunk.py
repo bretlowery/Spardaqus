@@ -60,7 +60,7 @@ class Splunk(SpextralEndpoint):
 
     def _createwindow(self):
         self.window = Window(endpointinstance=self)
-        self.window.init()
+        self.window.open()
 
     def _energizetransporters(self, thread_context):
         self.queue_complete = False

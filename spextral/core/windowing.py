@@ -33,7 +33,7 @@ class Window:
         self.endkey = self.endpoint.key + "::edt"
         self.state = self.endpoint.engine.service.state
 
-    def init(self):
+    def open(self):
         """Creates a query Window object used to extract data for import into Spextral with appropriate datetime endpoints persisted in Redis."""
         if self.endpoint.engine.options.init:
             self._deletekeys()
