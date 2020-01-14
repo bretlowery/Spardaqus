@@ -12,6 +12,7 @@ from spextral.core.utils import \
     error, \
     info, \
     printmsg, \
+    profile_memory, \
     wipe, \
     xlatearg
 
@@ -21,10 +22,6 @@ class SpextralEngine:
     Main starting point and controlling class for Spextral. Creates an instance of the appropriate service locally (extractor, analyzer, etc)
     based on the passed commandline startup values. Handles start, stop logic.
     """
-    @property
-    def encoding(self):
-        return getconfig("spextral", "config", "encoding", defaultvalue="utf-8")
-
     def config(self, setting, required=True, defaultvalue=0, choices=None, intrange=None, quotestrings=False):
         return getconfig(self.options.operation, self.options.operation, setting, required=required, defaultvalue=defaultvalue, choices=choices, intrange=intrange, quotestrings=quotestrings)
 
@@ -71,6 +68,8 @@ class SpextralEngine:
         if self.options.operation not in ['extract', 'analyze']:
             error("invalid operation name '%s' provided" % self.options.operation)
         info("Initializing Spextral")
+        if self.options.profile:
+            profile_memory()
         if debugging():
             info("Debugging mode detected")
         self.endpointname = self.config("endpoint")
@@ -81,12 +80,14 @@ class SpextralEngine:
         transportclass = getattr(importlib.import_module("spextral.transport.%s" % self.transportname), self.transportname.capitalize())
         self.transport = transportclass(self)
         self.transport.name = self.endpoint.name
+        self.encoding = getconfig("spextral", "config", "encoding", defaultvalue="utf-8")
         self.service = SpextralService(engine=self, pid_dir="/tmp", name=self.endpoint.name)
 
     def exit_actions(self):
-        if self.options.profile:
-            x = 1024.0 if sys.platform == "darwin" else 1.0 if sys.platform == "linux" else 1.0
-            info("\n\r%s MB maximum (peak) memory used" % str(round(globals.MAX_RSS_MEMORY_USED / 1024.0 / x, 3)))
+        return
+        #if self.options.profile:
+            #x = 1024.0 if sys.platform == "darwin" else 1.0 if sys.platform == "linux" else 1.0
+            #info("\n\r%s MB maximum (peak) memory used" % str(round(globals.MAX_RSS_MEMORY_USED / 1024.0 / x, 3)))
 
 
 def halt(engine, rtncode=0):

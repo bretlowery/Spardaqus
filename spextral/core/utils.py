@@ -391,6 +391,7 @@ def printmsg(msg):
 
 
 def profile_memory():
+    return
     """Take an available memory measurement. If larger than the current value of globals.MAX_RSS_MEMORY_USED,
     replace globals.MAX_RSS_MEMORY_USED with the new value. At EOP, globals.MAX_RSS_MEMORY_USED will contain
     the largest point in time amount of memory used by Spextral."""

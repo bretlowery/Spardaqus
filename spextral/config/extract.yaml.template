@@ -25,8 +25,8 @@ spextral:
     latest: none
     error_statuses: FATAL,ERROR
     warning_statuses: WARN,WARNING
-    action_on_empty: wait
-    on_empty_wait_interval: 60
+    on_no_results: wait
+    on_no_results_wait_interval: 60
   kafka:
     bootstrap.servers: localhost:9092
     group.id: 0

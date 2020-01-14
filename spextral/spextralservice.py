@@ -5,7 +5,7 @@ import os
 from queue import Queue
 import sys
 from service import Service as SystemService, find_syslog
-# import yappi
+import yappi
 
 from spextral import globals
 from spextral.core.instrumentation import InstrumentationManager, InstrumentationCollection
@@ -14,6 +14,7 @@ from spextral.core.utils import \
     error, \
     getconfig, \
     info, \
+    nowstr, \
     mergedicts, \
     profile_memory
 from spextral.core.state import Redis as StateManager
@@ -61,6 +62,15 @@ class SpextralService(SystemService):
         else:
             return super().is_running()
 
+    @property
+    def do(self):
+        return not globals.KILLSIG \
+            and self.instrumenter.status == "OK" \
+            and self.engine.endpoint.connected \
+            and not self.engine.endpoint.limit_reached \
+            and not (self.engine.endpoint.no_results_returned and self.engine.endpoint.on_no_results == "exit") \
+            and not self.engine.options.command == 'stop'
+
     def run(self):
         """
         Main service execution loop. Connects to the endpoint, analyzer, and transport mechanisms specified in the local Spextral
@@ -79,7 +89,6 @@ class SpextralService(SystemService):
                     logerrors=True,
                     loginfo=False,
                     profile=False,
-                    singleprocess=False,
                     test=False,
                     quiet=True
             )
@@ -96,22 +105,59 @@ class SpextralService(SystemService):
             #
             # main work loop: everything Spextral does happens here
             #
+            pstats_file = None
+            if self.engine.options.profile:
+                pstats_file = '/var/log/yappi.%s.%s.%s' % (globals.__NAME__, globals.__VERSION__, nowstr())
+                yappi.clear_stats()
+                yappi.start()
+                info("** --profile specified; starting performance profiling")
+                info("** pstats data will be written to /var/log/yappi.%s.%s" % (globals.__NAME__, globals.__VERSION__))
             self.engine.transport.connect()
             self.engine.endpoint.connect()
             if self.service_breaker_test:
                 info("Service breaker test signalled; shutting down")
-                self.stop()
-            if self.engine.endpoint.connected:
+            elif self.engine.endpoint.connected:
                 worker = getattr(sys.modules[__name__], self.engine.options.operation)
-                results = worker(self)
-                while not globals.KILLSIG \
-                        and self.instrumenter.status == "OK" \
-                        and self.engine.endpoint.connected \
-                        and not self.engine.endpoint.limit_reached \
-                        and not self.engine.options.command == 'stop':
+                while self.do:
                     results = worker(self)
+                    if self.engine.options.profile:
+                        profile_memory()
                 self.engine.transport.close()
                 self.engine.endpoint.close()
+            if self.engine.options.profile:
+                yappi.stop()
+                func_stats = yappi.get_func_stats()
+                if func_stats:
+                    _rows = []
+                    for _stat in func_stats._as_dict:
+                        if '/Spextral/' in _stat.full_name and '/venv/' not in _stat.full_name:
+                            _gizmo = _stat.full_name.split("/")[-1]
+                            _rows.append([ _gizmo.split(" ")[1], _gizmo.split(" ")[0], _stat.ncall, _stat.tavg, _stat.ttot, _stat.tsub])
+                    info("*")
+                    info("* TOP 50 CALLS BY TOT TIME")
+                    info("*")
+                    _hdr = ["NAME", "LOCATION", "CALLS", "AvgTIME", "TotTIME", "TotTIMELessSubcalls"]
+                    info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_hdr))
+                    _rows.sort(key=lambda x: x[4], reverse=True)
+                    i = 0
+                    for _row in _rows:
+                        info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_row))
+                        i += 1
+                        if i == 50:
+                            break
+                    info("*")
+                    info("* TOP 50 CALLS BY NUMBER OF CALLS")
+                    info("*")
+                    info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_hdr))
+                    _rows.sort(key=lambda x: x[2], reverse=True)
+                    i = 0
+                    for _row in _rows:
+                        info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_row))
+                        i += 1
+                        if i == 50:
+                            break
+                func_stats.save(pstats_file, type='pstat')
+                yappi.clear_stats()
             #
             #
             #
@@ -129,3 +175,13 @@ class SpextralService(SystemService):
             pass
         sys.exit(0)
 
+    @staticmethod
+    def _print_stats(stats, out, limit=None):
+        if stats.empty():
+            return
+        sizes = [36, 5, 8, 8, 8]
+        columns = dict(zip(range(len(yappi.COLUMNS_FUNCSTATS)), zip(yappi.COLUMNS_FUNCSTATS, sizes)))
+        show_stats = stats
+        if limit:
+            show_stats = stats[:limit]
+        info("** Profiler Results:\r\n%s" % show_stats)

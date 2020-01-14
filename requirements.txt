@@ -11,5 +11,5 @@ redis==3.3.11
 service==0.6.0
 splunk-sdk==1.6.11
 ua-parser==0.8.0
-user-agents>=2.0
-# yappi>=1.2.1
+user-agents==2.0
+yappi==1.2.3

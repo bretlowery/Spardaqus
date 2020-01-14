@@ -50,13 +50,13 @@ class Splunk(SpextralEndpoint):
         self.warning_statuses = self.config("warning_statuses", defaultvalue="WARN,WARNING", converttolist=True)
         self.limit_reached = False
         self.queue_complete = False
-        self.read_complete = False
-        self.action_on_empty = self.config("action_on_empty", defaultvalue="exit", choices=["exit", "halt", "pause", "wait", "sleep"])
-        if self.action_on_empty in ["pause", "sleep"]:
-            self.action_on_empty = "wait"
-        elif self.action_on_empty == "halt":
-            self.action_on_empty = "exit"
-        self.empty_pause_interval = self.config("on_empty_wait_interval", required=True, intrange=[1, 604800]) if self.action_on_empty in ["wait", "lookahead"] else None
+        self.no_results_returned = False
+        self.on_no_results = self.config("on_no_results", defaultvalue="exit", choices=["exit", "halt", "pause", "wait", "sleep"])
+        if self.on_no_results in ["pause", "sleep"]:
+            self.on_no_results = "wait"
+        elif self.on_no_results == "halt":
+            self.on_no_results = "exit"
+        self.on_no_results_wait_interval = self.config("on_no_results_wait_interval", required=True, intrange=[1, 604800]) if self.on_no_results == "wait" else None
 
     def _createwindow(self):
         self.window = Window(endpointinstance=self)
@@ -64,7 +64,7 @@ class Splunk(SpextralEndpoint):
 
     def _energizetransporters(self, thread_context):
         self.queue_complete = False
-        self.read_complete = False
+        self.no_results_returned = False
         for x in range(1, self.thread_count + 1):
             self.thread_results.append(thread_context.submit(self.engine.transport.send, (self.engine.service.que, x,)))
 
@@ -183,7 +183,7 @@ class Splunk(SpextralEndpoint):
         msg = None
         if self.forward and not lookup:
             self.thread_count = self.engine.transport.threads if self.engine.transport.threads > 0 else numcpus()
-            self.thread_count = 1 if 0 < self.engine.options.limit < 1000 else self.thread_count
+            self.thread_count = 1 if 0 < self.engine.options.limit < 10000 else self.thread_count
             self.info("Number of transport threads set to %d" % self.thread_count)
             thread_context = futures.ThreadPoolExecutor(self.thread_count)
         else:
@@ -192,8 +192,8 @@ class Splunk(SpextralEndpoint):
             with thread_context:
                 with instrumentation:
                     try:
-                        # for r in results.ResultsReader(io.BufferedReader(SpextralStreamBuffer(self.source.jobs.export(query, **kwargs_export)))):
-                        for r in results.ResultsReader(io.BufferedReader(self.source.jobs.export(query, **kwargs_export))):
+                        for r in results.ResultsReader(io.BufferedReader(SpextralStreamBuffer(self.source.jobs.export(query, **kwargs_export)))):
+                        # for r in results.ResultsReader(io.BufferedReader(self.source.jobs.export(query, **kwargs_export))):
                             if globals.KILLSIG:
                                 break
                             if isinstance(r, dict):
@@ -214,7 +214,7 @@ class Splunk(SpextralEndpoint):
                                         self.engine.service.que.put(r)
                                     self.grand_total_sent += 1
                                     instrumentation.increment()
-                                    if instrumentation.counter % 1000 == 0:
+                                    if instrumentation.counter % 10000 == 0:
                                         self.info("Queued %d to send" % instrumentation.counter) if self.forward \
                                             else self.info("DISCARDED %d events (forward = False)" % instrumentation.counter)
                                         if self.engine.options.profile:
@@ -254,7 +254,7 @@ class Splunk(SpextralEndpoint):
         if not datareturned:
             if msg == "spxtrlempty":
                 self.info("No more %s data in current window. " % self.integration.capitalize())
-                self.read_complete = True
+                self.no_results_returned = True
             elif msg:
                 self.error("no results returned from %s; response was: \"%s\" [query attempted = `%s`]" % (self.integration.capitalize(), msg, query))
             else:
@@ -284,6 +284,9 @@ class Splunk(SpextralEndpoint):
         via the transport mechanism to downstream consumers.
         :return:
         """
+        if self.no_results_returned and self.on_no_results == "wait":
+            self.info("Waiting %d seconds before trying again..." % self.on_no_results_wait_interval)
+            sleep(int(self.on_no_results_wait_interval))
         query_fragment = 'eval spxtrlid=sha512(host + "::" + _raw), ' \
                         'spxtrlevt1=strftime(%s, "%s"), ' \
                         'spxtrlevt2=strftime(_time, "%%Y%%m%%d%%H%%M%%S"), ' \
