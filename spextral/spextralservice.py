@@ -8,16 +8,17 @@ from service import Service as SystemService, find_syslog
 import yappi
 
 from spextral import globals
-from spextral.core.instrumentation import InstrumentationManager, InstrumentationCollection
+from spextral.core.instrumentation import InstrumentationManager
+import spextral.core.profiling as profile
 from spextral.core.utils import \
     debugging, \
     error, \
     getconfig, \
     info, \
     nowstr, \
-    mergedicts, \
-    profile_memory
+    mergedicts
 from spextral.core.state import Redis as StateManager
+
 
 
 def extract(serviceinstance):
@@ -107,9 +108,7 @@ class SpextralService(SystemService):
             #
             pstats_file = None
             if self.engine.options.profile:
-                pstats_file = '/var/log/yappi.%s.%s.%s' % (globals.__NAME__, globals.__VERSION__, nowstr())
-                yappi.clear_stats()
-                yappi.start()
+                pstats_file = profile.start()
                 info("** --profile specified; starting performance profiling")
                 info("** pstats data will be written to /var/log/yappi.%s.%s" % (globals.__NAME__, globals.__VERSION__))
             self.engine.transport.connect()
@@ -121,43 +120,11 @@ class SpextralService(SystemService):
                 while self.do:
                     results = worker(self)
                     if self.engine.options.profile:
-                        profile_memory()
+                        profile.memory()
                 self.engine.transport.close()
                 self.engine.endpoint.close()
             if self.engine.options.profile:
-                yappi.stop()
-                func_stats = yappi.get_func_stats()
-                if func_stats:
-                    _rows = []
-                    for _stat in func_stats._as_dict:
-                        if '/Spextral/' in _stat.full_name and '/venv/' not in _stat.full_name:
-                            _gizmo = _stat.full_name.split("/")[-1]
-                            _rows.append([ _gizmo.split(" ")[1], _gizmo.split(" ")[0], _stat.ncall, _stat.tavg, _stat.ttot, _stat.tsub])
-                    info("*")
-                    info("* TOP 50 CALLS BY TOT TIME")
-                    info("*")
-                    _hdr = ["NAME", "LOCATION", "CALLS", "AvgTIME", "TotTIME", "TotTIMELessSubcalls"]
-                    info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_hdr))
-                    _rows.sort(key=lambda x: x[4], reverse=True)
-                    i = 0
-                    for _row in _rows:
-                        info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_row))
-                        i += 1
-                        if i == 50:
-                            break
-                    info("*")
-                    info("* TOP 50 CALLS BY NUMBER OF CALLS")
-                    info("*")
-                    info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_hdr))
-                    _rows.sort(key=lambda x: x[2], reverse=True)
-                    i = 0
-                    for _row in _rows:
-                        info("{: <40} {: <32} {: >12} {: >24} {: >24} {: >24}".format(*_row))
-                        i += 1
-                        if i == 50:
-                            break
-                func_stats.save(pstats_file, type='pstat')
-                yappi.clear_stats()
+                profile.end(pstats_file)
             #
             #
             #

@@ -9,11 +9,11 @@ import splunklib.results as results
 
 from spextral import globals
 from spextral.core.metaclasses import SpextralEndpoint
+import spextral.core.profiling as profile
 from spextral.core.streamio import SpextralStreamBuffer
 from spextral.core.utils import \
     error, \
-    numcpus, \
-    profile_memory
+    numcpus
 from spextral.core.windowing import Window
 
 
@@ -218,7 +218,7 @@ class Splunk(SpextralEndpoint):
                                         self.info("Queued %d to send" % instrumentation.counter) if self.forward \
                                             else self.info("DISCARDED %d events (forward = False)" % instrumentation.counter)
                                         if self.engine.options.profile:
-                                            profile_memory()
+                                            profile.memory()
                                     if not batch_end_dt:
                                         batch_end_dt = r["spxtrlx"]
                                     if self.engine.options.limit > 0:
@@ -274,7 +274,7 @@ class Splunk(SpextralEndpoint):
             if batch_end_dt:
                 self.window.advance(batch_end_dt)
             if self.engine.options.profile:
-                profile_memory()
+                profile.memory()
             self.engine.service.instrumenter.printall(instrumentation_collection)
             return instrumentation_collection
 

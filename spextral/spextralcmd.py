@@ -6,13 +6,13 @@ from time import sleep
 
 from spextral import globals
 from spextral.spextralservice import SpextralService
+import spextral.core.profiling as profile
 from spextral.core.utils import \
     debugging, \
     getconfig, \
     error, \
     info, \
     printmsg, \
-    profile_memory, \
     wipe, \
     xlatearg
 
@@ -69,7 +69,7 @@ class SpextralEngine:
             error("invalid operation name '%s' provided" % self.options.operation)
         info("Initializing Spextral")
         if self.options.profile:
-            profile_memory()
+            profile.memory()
         if debugging():
             info("Debugging mode detected")
         self.endpointname = self.config("endpoint")
@@ -84,10 +84,9 @@ class SpextralEngine:
         self.service = SpextralService(engine=self, pid_dir="/tmp", name=self.endpoint.name)
 
     def exit_actions(self):
-        return
-        #if self.options.profile:
-            #x = 1024.0 if sys.platform == "darwin" else 1.0 if sys.platform == "linux" else 1.0
-            #info("\n\r%s MB maximum (peak) memory used" % str(round(globals.MAX_RSS_MEMORY_USED / 1024.0 / x, 3)))
+        if self.options.profile:
+            x = 1024.0 if sys.platform == "darwin" else 1.0 if sys.platform == "linux" else 1.0
+            info("\n\r%s MB maximum (peak) memory used" % str(round(globals.MAX_RSS_MEMORY_USED / 1024.0 / x, 3)))
 
 
 def halt(engine, rtncode=0):

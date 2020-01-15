@@ -2,7 +2,6 @@ import datetime
 import os
 from pathlib import Path
 import re
-import resource
 import subprocess
 import sys
 import uuid
@@ -101,10 +100,6 @@ def _getsetyaml(fname,
             else:
                 error("_getsetyaml.ConvertToList cannot be True for non-string setting '%s' in %s.yaml" % (settingname, fname))
     return val
-
-
-def _m(x):
-    return str(round(x / 1024.0 / globals.RSS_MEMORY_DIVISOR, 3))
 
 
 def boolish(val):
@@ -388,34 +383,6 @@ def printmsg(msg):
     """Print text to stdout."""
     print(msg, file=sys.stdout)
     sys.stdout.flush()
-
-
-def profile_memory():
-    return
-    """Take an available memory measurement. If larger than the current value of globals.MAX_RSS_MEMORY_USED,
-    replace globals.MAX_RSS_MEMORY_USED with the new value. At EOP, globals.MAX_RSS_MEMORY_USED will contain
-    the largest point in time amount of memory used by Spextral."""
-    curr_mem_used = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss - globals.RSS_MEMORY_BASE
-    if curr_mem_used > globals.MAX_RSS_MEMORY_USED:
-        globals.MAX_RSS_MEMORY_USED = curr_mem_used
-    if globals.LAST_RSS_MEMORY_USED == 0:
-        info("--profile: memory in use: %s MB so far" % _m(curr_mem_used))
-    else:
-        pct_change = str(round((curr_mem_used - globals.LAST_RSS_MEMORY_USED) / globals.LAST_RSS_MEMORY_USED * 100.0, 2))
-        if curr_mem_used > globals.LAST_RSS_MEMORY_USED:
-            pct_change = "+%s%%; " % pct_change
-            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
-                 (_m(curr_mem_used),
-                  pct_change,
-                  _m(globals.MAX_RSS_MEMORY_USED)))
-        elif curr_mem_used < globals.LAST_RSS_MEMORY_USED:
-            pct_change = "%s%%; " % pct_change
-            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
-                 (_m(curr_mem_used),
-                  pct_change,
-                  _m(globals.MAX_RSS_MEMORY_USED)))
-    globals.LAST_RSS_MEMORY_USED = curr_mem_used
-
 
 def setconfig(filename, sectionname, settingname, newvalue):
     """ Sets Spextral yaml-resident config values at runtime. May be overridden in SpextralIntegration and its subclasses."""
