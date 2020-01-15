@@ -107,13 +107,12 @@ class Kafka(SpextralTransport):
             pass
         return is_connected
 
-    def _threadend(self, que):
+    def _threadend(self):
         """
         THREADSAFETY REQUIRED
         Thread teardown tasks
         :return:
         """
-        # que.task_done()
         self.close()
 
     def send(self, argstuple):
@@ -180,16 +179,16 @@ class Kafka(SpextralTransport):
                             self.info("Queueing complete; sent %d via %s" % (instrumentation.counter, thread_name))
                         self.transporter.flush()
                 except KafkaException as kx:
-                    self._threadend(que)
+                    self._threadend()
                     raise kx
                 except KafkaError as ke:
-                    self._threadend(que)
+                    self._threadend()
                     raise ke
                 except Exception as e:
-                    self._threadend(que)
+                    self._threadend()
                     raise e
                 queue_data = None
-        self._threadend(que)
+        self._threadend()
         return instrumentation
 
     # kafka will handle receive timeouts itself, don't need to decorate this with a timeout_after
