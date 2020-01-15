@@ -22,13 +22,13 @@ def memory():
         pct_change = str(round((curr_mem_used - globals.LAST_RSS_MEMORY_USED) / globals.LAST_RSS_MEMORY_USED * 100.0, 2))
         if curr_mem_used > globals.LAST_RSS_MEMORY_USED:
             pct_change = "+%s%%; " % pct_change
-            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
+            info("** --profile: memory in use: %s MB (%s%s max MB so far)" %
                  (_m(curr_mem_used),
                   pct_change,
                   _m(globals.MAX_RSS_MEMORY_USED)))
         elif curr_mem_used < globals.LAST_RSS_MEMORY_USED:
             pct_change = "%s%%; " % pct_change
-            info("--profile: memory in use: %s MB (%s%s max MB so far)" %
+            info("** --profile: memory in use: %s MB (%s%s max MB so far)" %
                  (_m(curr_mem_used),
                   pct_change,
                   _m(globals.MAX_RSS_MEMORY_USED)))

@@ -128,7 +128,7 @@ class Kafka(SpextralTransport):
 
         def _packit(data, encoding):
             packit = self.envelope
-            d = mergedicts({}, data)  # converts OrderedDict returned by Splunk to plain old dict dict
+            d = dict(data)  # convert OrderedDict to dict
             packit["spxtrl"]["data"] = [d]
             packit["spxtrl"]["meta"]["id"] = data["spxtrlid"]
             packit["spxtrl"]["meta"]["info"]["bkt"] = data["spxtrlbkt"]
