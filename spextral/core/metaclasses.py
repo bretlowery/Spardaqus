@@ -39,8 +39,12 @@ class SpextralIntegration:
         pass
 
     def config(self, setting, required=False, defaultvalue=0, choices=None, intrange=None, quotestrings=False, converttolist=False):
-        return utils.getconfig(self.engine.options.operation, self.integration, setting, required=required, defaultvalue=defaultvalue,
-                               choices=choices, intrange=intrange, quotestrings=quotestrings, converttolist=converttolist)
+        if self.engine.options.operation == "dump":
+            return utils.getconfig("analyze", self.integration, setting, required=required, defaultvalue=defaultvalue,
+                                   choices=choices, intrange=intrange, quotestrings=quotestrings, converttolist=converttolist)
+        else:
+            return utils.getconfig(self.engine.options.operation, self.integration, setting, required=required, defaultvalue=defaultvalue,
+                                   choices=choices, intrange=intrange, quotestrings=quotestrings, converttolist=converttolist)
 
     def error(self, err):
         if self.logerrors:
@@ -96,11 +100,23 @@ class SpextralEndpoint(SpextralIntegration):
         pass
 
     @abstractattribute
+    def limit_reached(self):
+        pass
+
+    @abstractattribute
+    def on_no_results(self):
+        pass
+
+    @abstractattribute
     def query(self):
         pass
 
     @abstractattribute
     def reader(self):
+        pass
+
+    @abstractattribute
+    def results_returned(self):
         pass
 
     @abstractattribute
@@ -134,6 +150,9 @@ class SpextralEndpoint(SpextralIntegration):
         self.connection_attempts = 0
         self.envelope = {}
         self.key = None
+        self.limit_reached = False
+        self.on_no_results = None
+        self.results_returned = True
         self.query = None
         self.reader = None
         self.source = None
@@ -285,3 +304,10 @@ class SpextralAnalyzer(SpextralIntegration):
         super().__init__(integration)
         self.json = {}
         return
+
+
+class NullEndpoint(SpextralEndpoint):
+
+    def __init__(self, engine, integration):
+        self.engine = engine
+        super().__init__(integration)

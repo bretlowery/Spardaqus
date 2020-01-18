@@ -1,0 +1,5 @@
+
+class SpextralTimeoutWarning(UserWarning):
+    pass
+
+
