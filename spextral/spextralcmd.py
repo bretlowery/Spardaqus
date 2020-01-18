@@ -6,6 +6,7 @@ from time import sleep
 
 from spextral import globals
 from spextral.spextralservice import SpextralService
+from spextral.core.metaclasses import NullEndpoint
 import spextral.core.profiling as profile
 from spextral.core.utils import \
     debugging, \
@@ -26,13 +27,16 @@ class SpextralEngine:
         return getconfig(self.options.operation, self.options.operation, setting, required=required, defaultvalue=defaultvalue, choices=choices, intrange=intrange, quotestrings=quotestrings)
 
     def __init__(self):
-        argz = argparse.ArgumentParser(usage="spextralcmd [options] [command] [operation]")
+        argz = argparse.ArgumentParser(usage="spextralcmd [options] [command] [extract | analyze | dump [fromtransportname]")
         argz.add_argument("command",
                           nargs='?',
                           default=None)
         argz.add_argument("operation",
                           nargs='?',
                           default=None)
+        argz.add_argument("fromtransportname",
+                          nargs='?',
+                          default="none")
         argz.add_argument("--init",
                           action="store_true",
                           dest="init"
@@ -48,11 +52,6 @@ class SpextralEngine:
                           dest="profile",
                           default=False
                           )
-        argz.add_argument("--singleprocess",
-                          action="store_true",
-                          dest="singleprocess",
-                          default=False
-                          )
         self.options = argz.parse_args()
         try:
             self.options.command = xlatearg(self.options.command)
@@ -65,18 +64,23 @@ class SpextralEngine:
             error("No command and/or service name provided")
         if self.options.command not in ['start', 'stop', 'status', 'test', 'interactive']:
             error("Invalid command '%s' provided" % self.options.command)
-        if self.options.operation not in ['extract', 'analyze']:
+        if self.options.operation not in ['extract', 'analyze', 'dump']:
             error("invalid operation name '%s' provided" % self.options.operation)
         info("Initializing Spextral")
         if self.options.profile:
             profile.memory()
         if debugging():
             info("Debugging mode detected")
-        self.endpointname = self.config("endpoint")
-        endpointclass = getattr(importlib.import_module("spextral.%s.%s" % (self.options.operation, self.endpointname)), self.endpointname.capitalize())
-        self.endpoint = endpointclass(self)
-        self.endpoint.name = "Spextral%s%s/%s" % (self.endpoint.integration.capitalize(), self.options.operation.capitalize(), globals.__VERSION__)
-        self.transportname = self.config("transport")
+        if self.options.operation in ['extract', 'analyze']:
+            self.endpointname = self.config("endpoint")
+            endpointclass = getattr(importlib.import_module("spextral.%s.%s" % (self.options.operation, self.endpointname)), self.endpointname.capitalize())
+            self.endpoint = endpointclass(self)
+            self.endpoint.name = "Spextral%s%s/%s" % (self.endpoint.integration.capitalize(), self.options.operation.capitalize(), globals.__VERSION__)
+            self.transportname = self.config("transport")
+        elif self.options.operation in ['dump']:
+            self.endpoint = NullEndpoint(self,  self.options.fromtransportname.lower())
+            self.endpoint.name = "Spextral%s%s/%s" % ("TransportDump", "", globals.__VERSION__)
+            self.transportname = self.options.fromtransportname.lower()
         transportclass = getattr(importlib.import_module("spextral.transport.%s" % self.transportname), self.transportname.capitalize())
         self.transport = transportclass(self)
         self.transport.name = self.endpoint.name

@@ -41,6 +41,8 @@ class Spark(SpextralAnalyzer):
         self.sqlc = None
         self.ssc = None
         self.stream = None
+        self.limit_reached = False
+        self.results_returned = True
 
     @timeout_after(60)
     def _setcontext(self):

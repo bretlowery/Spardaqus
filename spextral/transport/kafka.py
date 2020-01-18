@@ -1,5 +1,5 @@
+import ast
 import datetime
-import pandas as pd
 from queue import Empty as QueueEmpty
 import socket
 import string
@@ -10,8 +10,9 @@ from pyspark.streaming.kafka import KafkaUtils
 
 from spextral import globals
 from spextral.core.decorators import timeout_after
+from spextral.core.exceptions import SpextralTimeoutWarning
 from spextral.core.metaclasses import SpextralTransport
-from spextral.core.utils import getconfig, istruthy, mergedicts
+from spextral.core.utils import istruthy, mergedicts
 
 
 class Kafka(SpextralTransport):
@@ -29,7 +30,7 @@ class Kafka(SpextralTransport):
             "bootstrap.servers": self.target,
             "enable.idempotence": self.idempotence
         }
-        if self.engine.options.operation == "extract":
+        if self.engine.options.operation in ["extract"]:
             transporter_kwargs = common_kwargs
             self.loss_tolerance = self.config("loss_tolerance", required=False, defaultvalue='zero', choices=['zero', 'high', 'low'])
             if self.loss_tolerance == "zero":
@@ -44,7 +45,7 @@ class Kafka(SpextralTransport):
                     if k not in transporter_kwargs.keys():
                         transporter_kwargs[k] = transporter_options[k]
             self.transporter_options = transporter_kwargs
-        elif self.engine.options.operation in ("analyze", "load"):
+        elif self.engine.options.operation in ["analyze", "dump"]:
             transporter_kwargs = mergedicts(common_kwargs, {'auto.offset.reset': 'earliest'})
             transporter_options = self.config("consumer.options", required=False, defaultvalue=None)
             if transporter_options:
@@ -75,7 +76,7 @@ class Kafka(SpextralTransport):
         self.maxwait = self.config("maxwait", required=False, defaultvalue=0)
 
     def getbucket(self):
-        config_bucket = getconfig("extract", self.integration, "topic", required=False, defaultvalue=None)
+        config_bucket = self.config("topic", required=False, defaultvalue=None)
         if config_bucket and config_bucket not in ["none", "default"]:
             bucket = config_bucket.strip().translate(str.maketrans(string.punctuation, '_' * len(string.punctuation)))
         else:
@@ -83,6 +84,7 @@ class Kafka(SpextralTransport):
         return bucket[:255]
 
     def connect(self):
+        """Connect to the Kafka instance specified in the extract.yaml's (when extracting) or analyze.yaml's (when analyzing) Kafka connection settings."""
         if self.engine.options.operation == "extract":
             self.info("Connecting to %s transport server at %s as a publisher" % (self.integration.capitalize(),self.target))
             self.transporter = Producer(**self.transporter_options)
@@ -100,6 +102,7 @@ class Kafka(SpextralTransport):
 
     @property
     def connected(self):
+        """Returns True if connected to Kafka, False otherwise."""
         try:
             is_connected = self._chkconnection()
         except:
@@ -193,6 +196,7 @@ class Kafka(SpextralTransport):
 
     # kafka will handle receive timeouts itself, don't need to decorate this with a timeout_after
     def receive(self, spark_streaming_context, bucket):
+        """Receive Spextral packets from the Kafka topic (bucket) and return a Spark Stream object to recieve them."""
         return KafkaUtils.createDirectStream(
                 spark_streaming_context,
                 [bucket],
@@ -201,8 +205,37 @@ class Kafka(SpextralTransport):
                     "group.id": str(self.groupid),
                 })
 
+    @timeout_after(10, "Transport queue is empty")
+    def _poll(self):
+        return self.transporter.poll()
+
+    def dump(self):
+        """Unloads all Spextral messages from Kafka and prints them out to the console instead of sending them to Spark."""
+        self.transporter.subscribe([self.bucket])
+        msg = None
+        try:
+            while True:
+                msg = None
+                msg = self._poll()
+                if not msg:
+                    break
+                msg_raw = msg.value().decode(self.engine.encoding)
+                event_dict = ast.literal_eval(msg_raw)
+                print(event_dict)
+        except SpextralTimeoutWarning:
+            pass
+        except KafkaException as kx:
+            raise kx
+        except KafkaError as ke:
+            raise ke
+        except Exception as e:
+            raise e
+        finally:
+            globals.KILLSIG = True
+
     @property
     def closed(self):
+        """Returns True if the connection to Kafka is closed/terminated/inactive, False otherwise."""
         if self.transporter:
             return False
         else:
@@ -210,12 +243,13 @@ class Kafka(SpextralTransport):
 
     @timeout_after(10)
     def close(self):
+        """Closes an open connection to Kafka."""
         try:
             if self.engine.options.operation == "extract":
                 self.transporter.flush()
-            else:
+            elif self.engine.options.operation == "analyze":
                 self.transporter.close()
         except:
             pass
-        return
+        return True
 

@@ -50,7 +50,7 @@ class Splunk(SpextralEndpoint):
         self.warning_statuses = self.config("warning_statuses", defaultvalue="WARN,WARNING", converttolist=True)
         self.limit_reached = False
         self.queue_complete = False
-        self.no_results_returned = False
+        self.results_returned = True
         self.on_no_results = self.config("on_no_results", defaultvalue="exit", choices=["exit", "halt", "pause", "wait", "sleep"])
         if self.on_no_results in ["pause", "sleep"]:
             self.on_no_results = "wait"
@@ -64,13 +64,13 @@ class Splunk(SpextralEndpoint):
 
     def _energizetransporters(self, thread_context):
         self.queue_complete = False
-        self.no_results_returned = False
+        self.results_returned = True
         for x in range(1, self.thread_count + 1):
             self.thread_results.append(thread_context.submit(self.engine.transport.send, (self.engine.service.que, x,)))
 
     def connect(self):
         """
-        Connects to the Splunk endpoint
+        Connects to the Splunk endpoint specified in the extract.yaml config file
         :return:
         """
         if not self.window:
@@ -254,7 +254,7 @@ class Splunk(SpextralEndpoint):
         if not datareturned:
             if msg == "spxtrlempty":
                 self.info("No more %s data in current window. " % self.integration.capitalize())
-                self.no_results_returned = True
+                self.results_returned = False
             elif msg:
                 self.error("no results returned from %s; response was: \"%s\" [query attempted = `%s`]" % (self.integration.capitalize(), msg, query))
             else:
@@ -284,7 +284,7 @@ class Splunk(SpextralEndpoint):
         via the transport mechanism to downstream consumers.
         :return:
         """
-        if self.no_results_returned and self.on_no_results == "wait":
+        if not self.results_returned and self.on_no_results == "wait":
             self.info("Waiting %d seconds before trying again..." % self.on_no_results_wait_interval)
             sleep(int(self.on_no_results_wait_interval))
         query_fragment = 'eval spxtrlid=sha512(host + "::" + _raw), ' \
@@ -302,11 +302,13 @@ class Splunk(SpextralEndpoint):
 
     @property
     def earliest(self):
+        """Returns the earliest possible date for extractable data in Splunk, in YYYYMMDDHHMISS format."""
         query_fragment = 'stats earliest(_time) as rawspxtrlval | eval spxtrlval=strftime(rawspxtrlval, "%Y%m%d%H%M%S") | table spxtrlval'
         return self._executequery(query_fragment, lookup="spxtrlval", lookup_label="timestamp of earliest relevant event")
 
     @property
     def latest(self):
+        """Returns the latest possible date for extractable data in Splunk, in YYYYMMDDHHMISS format."""
         query_fragment = 'stats latest(_time) as rawspxtrlval | eval spxtrlval=strftime(rawspxtrlval, "%Y%m%d%H%M%S") | table spxtrlval'
         return self._executequery(query_fragment, lookup="spxtrlval", lookup_label="timestamp of latest relevant event")
 

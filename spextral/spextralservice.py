@@ -15,10 +15,17 @@ from spextral.core.utils import \
     error, \
     getconfig, \
     info, \
-    nowstr, \
     mergedicts
 from spextral.core.state import Redis as StateManager
 
+
+def dump(serviceinstance):
+    """
+    Dump wrapper function
+    :param serviceinstance:
+    :return:
+    """
+    return serviceinstance.engine.transport.dump()
 
 
 def extract(serviceinstance):
@@ -58,18 +65,21 @@ class SpextralService(SystemService):
         self.instrumenter = InstrumentationManager(engine=self.engine)
 
     def is_running(self):
+
         if debugging:
             return False
         else:
             return super().is_running()
 
     @property
-    def do(self):
+    def runnable(self):
         return not globals.KILLSIG \
             and self.instrumenter.status == "OK" \
-            and self.engine.endpoint.connected \
-            and not self.engine.endpoint.limit_reached \
-            and not (self.engine.endpoint.no_results_returned and self.engine.endpoint.on_no_results == "exit") \
+            and (
+                   self.engine.endpoint.connected
+                   and not self.engine.endpoint.limit_reached
+                   and (self.engine.endpoint.on_no_results == "exit" and not self.engine.endpoint.results)
+               ) \
             and not self.engine.options.command == 'stop'
 
     def run(self):
@@ -117,10 +127,11 @@ class SpextralService(SystemService):
                 info("Service breaker test signalled; shutting down")
             elif self.engine.endpoint.connected:
                 worker = getattr(sys.modules[__name__], self.engine.options.operation)
-                while self.do:
-                    results = worker(self)
+                results = worker(self)
+                while self.runnable:
                     if self.engine.options.profile:
                         profile.memory()
+                    results = worker(self)
                 self.engine.transport.close()
                 self.engine.endpoint.close()
             if self.engine.options.profile:

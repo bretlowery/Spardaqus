@@ -1,4 +1,4 @@
-# updated 11-25-2019 bml
+# updated 01-17-2020 bml
 confluent_kafka==1.3.0
 findspark==1.3.0
 numpy==1.18.1
