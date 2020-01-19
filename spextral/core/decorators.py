@@ -34,9 +34,9 @@ def timeout_after(timeout_interval=None, timeout_message=None):
                 pass
             try:
                 # if timeout_message is not passed, use the encapsulating class's self.timeoutmsg property, if specified
-                timeoutmsg = timeout_message if timeout_message else args[0].timeoutmsg if args[0].timeoutmsg else "Operation timed out"
+                timeoutmsg = timeout_message if timeout_message else args[0].timeoutmsg if args[0].timeoutmsg else None
             except:
-                timeoutmsg = timeout_message if timeout_message else "Operation timed out"
+                timeoutmsg = timeout_message if timeout_message else None
                 pass
             q = Queue()
             results = None
@@ -54,7 +54,8 @@ def timeout_after(timeout_interval=None, timeout_message=None):
             if results:
                 if isinstance(results, str):
                     if results == "TIMEDOUT":
-                        info(timeoutmsg)
+                        if timeoutmsg:
+                            info(timeoutmsg)
                         raise SpextralTimeoutWarning
             return results
         return inner
