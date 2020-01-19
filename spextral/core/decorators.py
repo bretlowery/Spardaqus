@@ -13,6 +13,7 @@ def _call(timer, q, fn, args, kwargs):
     timer.start()
     result = fn(*args, **kwargs)
     q.put(result)
+    timer.cancel()
 
 
 def _timeout(q):
@@ -47,6 +48,8 @@ def timeout_after(timeout_interval=None, timeout_message=None):
                     results = q.get_nowait()
                 except QueueEmpty:
                     pass
+            if timer:
+                timer.cancel()
             q.task_done()
             if results:
                 if isinstance(results, str):
