@@ -140,8 +140,8 @@ class Kafka(SpextralTransport):
 
         que = argstuple[0]
         n = argstuple[1]
-        self.engine.service.instrumenter.register(groupname=self.integration)
         thread_name = "%s transport thread %d" % (self.integration.capitalize(), n)
+        self.engine.service.instrumenter.register(groupname=self.integration)
         self.info("Starting %s" % thread_name)
         instrumentation = self.engine.service.instrumenter.get(thread_name)
         wait_ticks = 0
@@ -183,12 +183,13 @@ class Kafka(SpextralTransport):
                         self.transporter.flush()
                 except KafkaException as kx:
                     self._threadend()
-                    raise kx
+                    self.error("KafkaException transporting via %s: %s" % (thread_name, str(kx)))
                 except KafkaError as ke:
                     self._threadend()
-                    raise ke
+                    self.error("KafkaError transporting via %s: %s" % (thread_name, str(ke)))
                 except Exception as e:
                     self._threadend()
+                    self.error("exception transporting via %s: %s" % (thread_name, str(e)))
                     raise e
                 queue_data = None
         self._threadend()
@@ -225,11 +226,11 @@ class Kafka(SpextralTransport):
         except SpextralTimeoutWarning:
             pass
         except KafkaException as kx:
-            raise kx
+            self.error("KafkaException: %s" % str(kx))
         except KafkaError as ke:
-            raise ke
+            self.error("KafkaError: %s" % str(ke))
         except Exception as e:
-            raise e
+            self.error("Exception: %s" % str(e))
         finally:
             globals.KILLSIG = True
 

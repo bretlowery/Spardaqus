@@ -77,8 +77,8 @@ class SpextralService(SystemService):
             and self.instrumenter.status == "OK" \
             and (
                    self.engine.endpoint.connected
+                   and not (self.engine.endpoint.on_no_results == "exit" and not self.engine.endpoint.results)
                    and not self.engine.endpoint.limit_reached
-                   and (self.engine.endpoint.on_no_results == "exit" and not self.engine.endpoint.results)
                ) \
             and not self.engine.options.command == 'stop'
 
@@ -127,11 +127,12 @@ class SpextralService(SystemService):
                 info("Service breaker test signalled; shutting down")
             elif self.engine.endpoint.connected:
                 worker = getattr(sys.modules[__name__], self.engine.options.operation)
-                results = worker(self)
                 while self.runnable:
+                    results = worker(self)
                     if self.engine.options.profile:
                         profile.memory()
-                    results = worker(self)
+                    if self.engine.options.operation == "dump":
+                        break
                 self.engine.transport.close()
                 self.engine.endpoint.close()
             if self.engine.options.profile:
