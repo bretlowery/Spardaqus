@@ -15,8 +15,8 @@ class Window:
         self.upper_offset = 0
         self.lower_bound = None
         self.upper_bound = None
-        self.start = None
-        self.end = None
+        self.epochstart = None
+        self.epochend = None
         earliest = self.endpoint.config("earliest", defaultvalue=None)
         if isinstance(earliest, int):
             if earliest < 0:
@@ -37,23 +37,20 @@ class Window:
         """Creates a query Window object used to extract data for import into Spextral with appropriate datetime endpoints persisted in Redis."""
         if self.endpoint.engine.options.init:
             self._deletekeys()
-        edt = self._initend()
-        sdt = self._initstart()
-        self.state.set(self.endkey, edt)
-        self.state.set(self.startkey, sdt)
+        e = self._initend()
+        s = self._initstart()
+        self.state.set(self.endkey, e)
+        self.state.set(self.startkey, s)
         self.state.commit()
 
     def advance(self, current_as_of):
         """Moves the window forward in time to the next next query window in chronological order based on the window's current start/end times."""
         try:
-            sdt = str(datetime.datetime.strftime(dtparser.parse(current_as_of) + datetime.timedelta(seconds=1), self.format))
-            self.state.set(self.startkey, sdt)
+            s = str(int(current_as_of) + 1)
+            self.state.set(self.startkey, s)
             self.state.commit()
-            if self.lower_bound:
-                if sdt < self.lower_bound:
-                    sdt = self.lower_bound
-            self.start = str(datetime.datetime.strftime(dtparser.parse(sdt), self.format))
-            info("Next batch start date advanced to %s" % sdt)
+            self.epochstart = s
+            info("Next batch start date advanced to %s (%s)" % (s, self.start))
         except Exception as e:
             error("Trying to advance window start date: %s" % str(e))
         return
@@ -63,30 +60,39 @@ class Window:
         self.state.delete(self.endkey)
 
     def _initstart(self):
-        sdt = self.state.get(self.startkey)
-        if not sdt:
-            sdt = self.endpoint.earliest
-            if not sdt:
-                sdt = str(datetime.datetime.strftime(self.batchstartdt - datetime.timedelta(seconds=7776000), self.format))
+        s = self.state.get(self.startkey)
+        if not s:
+            s = self.endpoint.earliest
+            if not s:
+                s = str((self.batchstartdt - datetime.timedelta(seconds=7776000)).fromtimestamp(0))
             else:
-                sdt = str(datetime.datetime.strftime(dtparser.parse(sdt) + datetime.timedelta(seconds=self.lower_offset), self.format))
+                s = str(int(s) + self.lower_offset)
         if self.lower_bound:
-            if sdt < self.lower_bound:
-                sdt = self.lower_bound
-        self.start = str(datetime.datetime.strftime(dtparser.parse(sdt), self.format))
-        return sdt
+            st = str(datetime.datetime.strptime(self.lower_bound, self.format).fromtimestamp(0))
+            if s < st:
+                s = st
+        self.epochstart = s
+        return s
 
     def _initend(self):
-        edt = self.state.get(self.endkey)
-        if not edt:
-            edt = self.endpoint.latest
-            if not edt:
-                edt = str(datetime.datetime.strftime(self.batchstartdt, self.format))
+        e = self.state.get(self.endkey)
+        if not e:
+            e = self.endpoint.latest
+            if not e:
+                e = str(self.batchstartdt.fromtimestamp(0))
             else:
-                edt = str(datetime.datetime.strftime(dtparser.parse(edt) + datetime.timedelta(seconds=self.upper_offset), self.format))
+                e = str(int(e) + self.upper_offset)
         if self.upper_bound:
-            if edt > self.upper_bound:
-                edt = self.upper_bound
-        self.end = str(datetime.datetime.strftime(dtparser.parse(edt), self.format))
-        return edt
+            et = str(datetime.datetime.strptime(self.upper_bound, self.format).fromtimestamp(0))
+            if e > et:
+                e = et
+        self.epochend = e
+        return e
 
+    @property
+    def start(self):
+        return datetime.datetime.utcfromtimestamp(int(self.epochstart)).strftime(self.format)
+
+    @property
+    def end(self):
+        return datetime.datetime.utcfromtimestamp(int(self.epochend)).strftime(self.format)

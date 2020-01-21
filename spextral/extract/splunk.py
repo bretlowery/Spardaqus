@@ -12,7 +12,6 @@ from spextral.core.metaclasses import SpextralEndpoint
 import spextral.core.profiling as profile
 from spextral.core.streamio import SpextralStreamBuffer
 from spextral.core.utils import \
-    error, \
     numcpus
 from spextral.core.windowing import Window
 
@@ -120,7 +119,7 @@ class Splunk(SpextralEndpoint):
                         isconnected = True
                         break
             except Exception as e:
-                error("testing connection to %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+                self.error("testing connection to %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
         return isconnected
 
     def _executequery(self, dynamic_query_filter="where(1==2)", lookup=None, lookup_label=None):
@@ -132,36 +131,40 @@ class Splunk(SpextralEndpoint):
         rtn = "OK"
         rlist = []
         sample_percentage = 100 if lookup else self.sample_percentage
-        main_subquery = 'search index=%s' % self.bucketname
+        main_subquery = 'index=%s' % self.bucketname
         basic_filters = ""
         if self.static_source_filter:
-            basic_filters = "where(source in(%s)" % self.static_source_filter
+            basic_filters = "source = %s" % self.static_source_filter
         if self.static_sourcetype_filter:
             if basic_filters:
-                basic_filters = "%s AND sourcetype in(%s)" % (basic_filters, self.static_sourcetype_filter)
+                basic_filters = "%s sourcetype = %s" % (basic_filters, self.static_sourcetype_filter)
             else:
-                basic_filters = "where(sourcetype in(%s)" % self.static_sourcetype_filter
+                basic_filters = "sourcetype = %s" % self.static_sourcetype_filter
         if self.static_host_filter:
             if basic_filters:
-                basic_filters = "%s AND host in(%s)" % (basic_filters, self.static_host_filter)
+                basic_filters = "%s host = %s" % (basic_filters, self.static_host_filter)
             else:
-                basic_filters = "where(host in(%s)" % self.static_host_filter
+                basic_filters = "host = %s" % self.static_host_filter
         if basic_filters:
-            main_subquery = "%s | %s) " % (main_subquery, basic_filters)
+            main_subquery = "%s %s " % (main_subquery, basic_filters)
         if self.static_query_filter:
-            main_subquery = '%s %s' % (main_subquery, self.static_query_filter)
+            main_subquery = "%s %s " % (main_subquery, self.static_query_filter)
+        boxed_subquery = main_subquery
         if self.window:
-            if self.window.start and self.window.end and self.window.format:
-                main_subquery = '%s | where(_time >= strptime(\"%s\", \"%s\") AND _time <= strptime(\"%s\", \"%s\")) ' % \
-                                (main_subquery, self.window.start, self.window.format, self.window.end, self.window.format)
+            if self.window.epochstart and self.window.epochend:
+                boxed_subquery = '%s _time >= %s _time <= %s ' % (main_subquery, self.window.epochstart, self.window.epochend)
         if lookup:
-            query = "%s %s" % (self.query_comment, main_subquery)
+            query = "%s search %s" % (self.query_comment, boxed_subquery)
         else:
-            query = "%s %s | eval spxtrlx=[ %s | tail %d | stats latest(_time) as xq | appendpipe [ stats count as xq | where xq==0 ] | return $xq ] " \
-                    "| where(_time <= spxtrlx) | eval spxtrlx=strftime(spxtrlx,  \"%%Y%%m%%d%%H%%M%%S\") " \
+            query = "%s search %s | eval spxtrlx=[ tstats count where (%s _time >= %s _time <= %s) by _time span=1s | streamstats sum(count) AS totalcount global=t " \
+                    "| eval offset=totalcount - %d | where offset > 0 | sort offset asc | head 1 | rename _time AS xq " \
+                    "| appendpipe [ stats count as xq | where xq==0 ] | return $xq ] " \
+                    "| where(_time <= spxtrlx) " \
                     % (self.query_comment,
+                       boxed_subquery,
                        main_subquery,
-                       main_subquery,
+                       self.window.epochstart,
+                       self.window.epochend,
                        self.batch_goal)
         if dynamic_query_filter:
             query = "%s | %s" % (query, dynamic_query_filter)
@@ -177,8 +180,8 @@ class Splunk(SpextralEndpoint):
         if lookup and lookup_label:
             self.info("Metadata lookup (%s)" % lookup_label)
         else:
-            self.info("Querying starting from base window date %s" % self.window.start)
-        batch_end_dt = None
+            self.info("Querying starting from base window date %s (%s)" % (self.window.epochstart, self.window.start))
+        batch_end_et = None
         datareturned = False
         msg = None
         if self.forward and not lookup:
@@ -193,7 +196,6 @@ class Splunk(SpextralEndpoint):
                 with instrumentation:
                     try:
                         for r in results.ResultsReader(io.BufferedReader(SpextralStreamBuffer(self.source.jobs.export(query, **kwargs_export)))):
-                        # for r in results.ResultsReader(io.BufferedReader(self.source.jobs.export(query, **kwargs_export))):
                             if globals.KILLSIG:
                                 break
                             if isinstance(r, dict):
@@ -219,8 +221,8 @@ class Splunk(SpextralEndpoint):
                                             else self.info("DISCARDED %d events (forward = False)" % instrumentation.counter)
                                         if self.engine.options.profile:
                                             profile.memory()
-                                    if not batch_end_dt:
-                                        batch_end_dt = r["spxtrlx"]
+                                    if not batch_end_et:
+                                        batch_end_et = r["spxtrlx"]
                                     if self.engine.options.limit > 0:
                                         if self.engine.options.limit == self.grand_total_sent:
                                             self.limit_reached = True
@@ -231,12 +233,12 @@ class Splunk(SpextralEndpoint):
                                 if status in self.error_statuses:
                                     rtn = "While querying %s: %s" % (self.integration.capitalize(), r.message)
                                     if query:
-                                        rtn = "%s [query attempted = `%s`]" % (rtn, query)
+                                        rtn = "%s; query attempted = `%s`" % (rtn, query)
                                 elif status in self.warning_statuses:
                                     self.info("While querying %s: %s" % (self.integration.capitalize(), r.message))
                                     status = "OK"
                     except Exception as e:
-                        self.error("Error querying %s: %s" % (self.target, str(e)))
+                        self.error("querying %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
                     self.queue_complete = True
                     if (lookup or instrumentation.counter > 0) and status not in ['FATAL', 'ERROR']:
                         if lookup:
@@ -244,7 +246,7 @@ class Splunk(SpextralEndpoint):
                                 rtn = rlist[0]
                                 self.info("Metadata answer (%s) = %s" % (lookup_label, rtn))
                             else:
-                                self.error("%s returned message: %s [query attempted = `%s`]" % (self.integration.capitalize(), r.message, query))
+                                self.error("%s returned message: %s; query attempted = `%s`" % (self.integration.capitalize(), r.message, query))
                         else:
                             if self.forward:
                                 self.info("Queued a total of %d events" % instrumentation.counter)
@@ -256,9 +258,9 @@ class Splunk(SpextralEndpoint):
                 self.info("No more %s data in current window. " % self.integration.capitalize())
                 self.results_returned = False
             elif msg:
-                self.error("no results returned from %s; response was: \"%s\" [query attempted = `%s`]" % (self.integration.capitalize(), msg, query))
+                self.error("no results returned from %s; response was: \"%s\"; query attempted = `%s`" % (self.integration.capitalize(), msg, query))
             else:
-                self.error("no response from %s [query attempted = `%s`]" % (self.integration.capitalize(), query))
+                self.error("no response from %s; query attempted = `%s`" % (self.integration.capitalize(), query))
         if lookup:
             return rtn
         else:
@@ -271,8 +273,8 @@ class Splunk(SpextralEndpoint):
                         self.info("Transport thread cancelled")
                         pass
                 instrumentation_collection = self.engine.service.instrumenter.collectall()
-            if batch_end_dt:
-                self.window.advance(batch_end_dt)
+            if batch_end_et:
+                self.window.advance(batch_end_et)
             if self.engine.options.profile:
                 profile.memory()
             self.engine.service.instrumenter.printall(instrumentation_collection)
@@ -288,28 +290,28 @@ class Splunk(SpextralEndpoint):
             self.info("Waiting %d seconds before trying again..." % self.on_no_results_wait_interval)
             sleep(int(self.on_no_results_wait_interval))
         query_fragment = 'eval spxtrlid=sha512(host + "::" + _raw), ' \
-                        'spxtrlevt1=strftime(%s, "%s"), ' \
-                        'spxtrlevt2=strftime(_time, "%%Y%%m%%d%%H%%M%%S"), ' \
-                        'spxtrldata=_raw, ' \
-                        'spxtrlidxn=_index, ' \
-                        'spxtrlhost=host,' \
-                        'spxtrlsrc=source,' \
-                        'spxtrlstyp=sourcetype, ' \
-                        'spxtrlbkt="%s" ' \
-                        '| appendpipe [ stats count as spxtrlempty | where spxtrlempty==0 ]' \
-                        '| table spxtrl* ' % (self.timestamp_field_name, self.timestamp_field_format, self.bucketname)
+                         'spxtrlevt1=strftime(%s, "%s"), ' \
+                         'spxtrlevt2=strftime(_time, "%%Y%%m%%d%%H%%M%%S"), ' \
+                         'spxtrldata=_raw, ' \
+                         'spxtrlidxn=_index, ' \
+                         'spxtrlhost=host,' \
+                         'spxtrlsrc=source,' \
+                         'spxtrlstyp=sourcetype, ' \
+                         'spxtrlbkt="%s" ' \
+                         '| appendpipe [ stats count as spxtrlempty | where spxtrlempty==0 ] | table spxtrl* ' % \
+                         (self.timestamp_field_name, self.timestamp_field_format, self.bucketname)
         return self._executequery(query_fragment)
 
     @property
     def earliest(self):
-        """Returns the earliest possible date for extractable data in Splunk, in YYYYMMDDHHMISS format."""
-        query_fragment = 'stats earliest(_time) as rawspxtrlval | eval spxtrlval=strftime(rawspxtrlval, "%Y%m%d%H%M%S") | table spxtrlval'
+        """Returns the earliest possible date for extractable data in Splunk, in UNIX epoch time format."""
+        query_fragment = 'stats earliest(_time) as spxtrlval | table spxtrlval'
         return self._executequery(query_fragment, lookup="spxtrlval", lookup_label="timestamp of earliest relevant event")
 
     @property
     def latest(self):
-        """Returns the latest possible date for extractable data in Splunk, in YYYYMMDDHHMISS format."""
-        query_fragment = 'stats latest(_time) as rawspxtrlval | eval spxtrlval=strftime(rawspxtrlval, "%Y%m%d%H%M%S") | table spxtrlval'
+        """Returns the latest possible date for extractable data in Splunk, in UNIX epoch time format."""
+        query_fragment = 'stats latest(_time) as spxtrlval | table spxtrlval'
         return self._executequery(query_fragment, lookup="spxtrlval", lookup_label="timestamp of latest relevant event")
 
     def getnextsource(self):
