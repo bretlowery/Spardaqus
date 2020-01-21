@@ -153,14 +153,3 @@ class SpextralService(SystemService):
         except:
             pass
         sys.exit(0)
-
-    @staticmethod
-    def _print_stats(stats, out, limit=None):
-        if stats.empty():
-            return
-        sizes = [36, 5, 8, 8, 8]
-        columns = dict(zip(range(len(yappi.COLUMNS_FUNCSTATS)), zip(yappi.COLUMNS_FUNCSTATS, sizes)))
-        show_stats = stats
-        if limit:
-            show_stats = stats[:limit]
-        info("** Profiler Results:\r\n%s" % show_stats)
