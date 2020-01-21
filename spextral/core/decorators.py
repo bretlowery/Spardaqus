@@ -11,12 +11,12 @@ from spextral.core.utils import info
 
 def _call(timer, q, fn, args, kwargs):
     timer.start()
-    result = fn(*args, **kwargs)
-    q.put(result)
+    results = fn(*args, **kwargs)
+    q.put(results)
     timer.cancel()
 
 
-def _timeout(q):
+def _ontimeout(q):
     q.put("TIMEDOUT")
 
 
@@ -40,9 +40,9 @@ def timeout_after(timeout_interval=None, timeout_message=None):
                 pass
             q = Queue()
             results = None
-            timer = threading.Timer(maxtime, _timeout, args=[q])
-            timerthread = threading.Thread(target=_call, args=[timer, q, fn, args, kwargs])
-            timerthread.start()
+            timer = threading.Timer(maxtime, _ontimeout, args=[q])
+            timed_thread = threading.Thread(target=_call, args=[timer, q, fn, args, kwargs])
+            timed_thread.start()
             while timer and not results:
                 try:
                     results = q.get_nowait()
