@@ -12,9 +12,10 @@ from pyspark.streaming import StreamingContext
 from pyspark.sql import Row, DataFrame, SQLContext
 
 from spextral import globals
-from spextral.core.metaclasses import SpextralAnalyzer
-from spextral.core.utils import error, tmpfile
 from spextral.core.decorators import timeout_after
+from spextral.core.exceptions import SpextralTimeoutWarning
+from spextral.core.metaclasses import SpextralAnalyzer
+from spextral.core.utils import tmpfile
 
 
 def _createlog4jpropfile():
@@ -43,30 +44,34 @@ class Spark(SpextralAnalyzer):
         self.stream = None
         self.limit_reached = False
         self.results_returned = True
+        self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
 
     @timeout_after(60)
     def _setcontext(self):
-        if sys.platform == "darwin":
-            try:
-                os.mkdir("/tmp/spark-events")
-            except OSError:
-                pass
-        os.environ["SPARK_HOME"] = self.config("home", required=False, defaultvalue=os.environ["SPARK_HOME"])
-        os.environ["PYSPARK_PYTHON"] = self.config("pyspark.python", required=False, defaultvalue=os.environ["PYSPARK_PYTHON"])
-        os.environ["PYSPARK_DRIVER_PYTHON"] = self.config("pyspark.driver.python", required=False, defaultvalue=os.environ["PYSPARK_DRIVER_PYTHON"])
-        _createlog4jpropfile()
-        sc_conf = SparkConf()
-        sc_conf.setAppName(self.name)
-        sc_conf.setMaster(self.target)
-        sc_conf.set("spark.executor.extraJavaOptions", "\"-Dlog4j.configuration=file://%s\"" % globals.LOG4JPROPFILE)
-        sc_conf.set("spark.driver.extraJavaOptions", "\"-Dlog4j.configuration=file://%s\"" % globals.LOG4JPROPFILE)
-        sparkoptions = self.config("sparkcontext.options", required=False, defaultvalue={})
-        if sparkoptions:
-            for k in sparkoptions.keys():
-                sc_conf.set(k, sparkoptions[k])
-        self.sc = SparkContext(appName=self.name, conf=sc_conf)
-        self.sc._jvm.org.apache.log4j.LogManager.getLogger("org").setLevel(self.sc._jvm.org.apache.log4j.Level.WARN)
-        self.sc._jvm.org.apache.log4j.LogManager.getLogger("akka").setLevel(self.sc._jvm.org.apache.log4j.Level.WARN)
+        try:
+            if sys.platform == "darwin":
+                try:
+                    os.mkdir("/tmp/spark-events")
+                except OSError:
+                    pass
+            os.environ["SPARK_HOME"] = self.config("home", required=False, defaultvalue=os.environ["SPARK_HOME"])
+            os.environ["PYSPARK_PYTHON"] = self.config("pyspark.python", required=False, defaultvalue=os.environ["PYSPARK_PYTHON"])
+            os.environ["PYSPARK_DRIVER_PYTHON"] = self.config("pyspark.driver.python", required=False, defaultvalue=os.environ["PYSPARK_DRIVER_PYTHON"])
+            _createlog4jpropfile()
+            sc_conf = SparkConf()
+            sc_conf.setAppName(self.name)
+            sc_conf.setMaster(self.target)
+            sc_conf.set("spark.executor.extraJavaOptions", "\"-Dlog4j.configuration=file://%s\"" % globals.LOG4JPROPFILE)
+            sc_conf.set("spark.driver.extraJavaOptions", "\"-Dlog4j.configuration=file://%s\"" % globals.LOG4JPROPFILE)
+            sparkoptions = self.config("sparkcontext.options", required=False, defaultvalue={})
+            if sparkoptions:
+                for k in sparkoptions.keys():
+                    sc_conf.set(k, sparkoptions[k])
+            self.sc = SparkContext(appName=self.name, conf=sc_conf)
+            self.sc._jvm.org.apache.log4j.LogManager.getLogger("org").setLevel(self.sc._jvm.org.apache.log4j.Level.WARN)
+            self.sc._jvm.org.apache.log4j.LogManager.getLogger("akka").setLevel(self.sc._jvm.org.apache.log4j.Level.WARN)
+        except SpextralTimeoutWarning as w:
+            pass
 
     def connect(self, **kwargs):
         self.info("Connecting to %s analyze cluster at %s" % (self.integration.capitalize(), self.target))
@@ -76,7 +81,7 @@ class Spark(SpextralAnalyzer):
             self.ssc = StreamingContext(self.sc, self.batchduration)
             self.stream = self.engine.transport.receive(self.ssc, self.bucket)
         except Exception as e:
-            error("ERROR during connection to %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+            self.error("querying %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
 
     @property
     def data(self):
