@@ -27,6 +27,8 @@ spextral:
     warning_statuses: WARN,WARNING
     on_no_results: wait
     on_no_results_wait_interval: 60
+    enable_query_comment: true
+    query_comment: If enabled, this is prefixed to every Splunk query issued
   kafka:
     bootstrap.servers: localhost:9092
     group.id: 0

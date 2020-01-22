@@ -40,8 +40,11 @@ class Splunk(SpextralEndpoint):
         self.key = hashlib.sha3_256(k.encode('utf-8')).hexdigest()
         self.forward = self.config("forward", defaultvalue=True, choices=[True, False])
         self.batch_goal = self.config("batch_goal", intrange=[1, 1000000], defaultvalue=10000)
-        # self.query_comment = "`comment(\"%s/%s\")`" % (globals.__NAME__, globals.__VERSION__)    # commented out to avoid splunk bug  10/29/2019 bml
         self.query_comment = ""
+        enable_query_comment = self.config("enable_query_comment", defaultvalue=False, choices=[True, False])
+        if enable_query_comment:
+            query_comment = self.config("query_comment", defaultvalue="")[:1024]
+            self.query_comment = "`comment(\"%s/%s%s\")`" % (globals.__NAME__, globals.__VERSION__, " %s" % query_comment if query_comment else "")
         self.grand_total_sent = 0
         self.thread_count = 0
         self.thread_results = []
