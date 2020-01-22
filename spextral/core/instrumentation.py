@@ -67,7 +67,7 @@ class Instrumentation:
             self._persecond = 0
             self._last = self._now
         if self._now % 30 == 0:
-            self.avgrps = sum(self._counters) / len(self._counters)
+            self.avgrps = sum(self._counters) / len(self._counters) if len(self._counters) > 0 else 0.0
             j = min(self._counters)
             if j < self.minrps:
                 self.minrps = j
