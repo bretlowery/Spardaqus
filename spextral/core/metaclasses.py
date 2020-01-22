@@ -20,6 +20,7 @@ class SpextralIntegration:
         self.loginfo = utils.getconfig("spextral", "config", "loginfo", required=True)
         self.logerrors = utils.getconfig("spextral", "config", "logerrors", required=True)
         self.haltonerror = utils.getconfig("spextral", "config", "haltonerror", required=True)
+        self.keysize = utils.getconfig("spextral", "config", "keysize", required=True, defaultvalue=32, intrange=[8, 128])
         self.name = "SpextralGenericService"
 
     @abstractattribute

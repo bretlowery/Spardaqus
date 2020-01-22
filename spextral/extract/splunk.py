@@ -286,10 +286,7 @@ class Splunk(SpextralEndpoint):
         via the transport mechanism to downstream consumers.
         :return:
         """
-        if not self.results_returned and self.on_no_results == "wait":
-            self.info("Waiting %d seconds before trying again..." % self.on_no_results_wait_interval)
-            sleep(int(self.on_no_results_wait_interval))
-        query_fragment = 'eval spxtrlid=sha512(host + "::" + _raw), ' \
+        query_fragment = 'eval spxtrlid=substr(sha512(host + "::" + _raw),1,%d), ' \
                          'spxtrlevt1=strftime(%s, "%s"), ' \
                          'spxtrlevt2=strftime(_time, "%%Y%%m%%d%%H%%M%%S"), ' \
                          'spxtrldata=_raw, ' \
@@ -299,7 +296,7 @@ class Splunk(SpextralEndpoint):
                          'spxtrlstyp=sourcetype, ' \
                          'spxtrlbkt="%s" ' \
                          '| appendpipe [ stats count as spxtrlempty | where spxtrlempty==0 ] | table spxtrl* ' % \
-                         (self.timestamp_field_name, self.timestamp_field_format, self.bucketname)
+                         (self.keysize, self.timestamp_field_name, self.timestamp_field_format, self.bucketname)
         return self._executequery(query_fragment)
 
     @property
