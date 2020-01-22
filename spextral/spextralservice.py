@@ -5,7 +5,7 @@ import os
 from queue import Queue
 import sys
 from service import Service as SystemService, find_syslog
-import yappi
+from time import sleep
 
 from spextral import globals
 from spextral.core.instrumentation import InstrumentationManager
@@ -133,6 +133,9 @@ class SpextralService(SystemService):
                         profile.memory()
                     if self.engine.options.operation == "dump":
                         break
+                    if not self.engine.endpoint.results_returned and self.engine.endpoint.on_no_results == "wait":
+                        info("Waiting %d seconds before trying again..." % self.engine.endpoint.on_no_results_wait_interval)
+                        sleep(int(self.engine.endpoint.on_no_results_wait_interval))
                 self.engine.transport.close()
                 self.engine.endpoint.close()
             if self.engine.options.profile:
