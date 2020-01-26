@@ -11,8 +11,8 @@ spextral:
     autoconfigurehadoop: True
   kafka:
     bootstrap.servers: localhost:9092
-    topic: default
-    consumer.options: { 'group.id': 1,
+    group.id: 0
+    consumer.options: { 'group.id': 0,
       # 'security.protocol': 'ssl',
       # 'ssl.ca.location': 'ca-cert',
       # 'ssl.certificate.location': 'cert-signed',

@@ -5,6 +5,7 @@ spextral:
     logerrors: true
     loginfo: true
     encoding: utf-8
+    keysize: 20  # 8 - 128 characters
   redis:
     host: localhost
     port: 6379
