@@ -290,8 +290,9 @@ class Splunk(SpextralEndpoint):
         :return:
         """
         query_fragment = 'eval spxtrlid=substr(sha512(host + "::" + _raw),1,%d), ' \
-                         'spxtrlevt1=strftime(%s, "%s"), ' \
-                         'spxtrlevt2=strftime(_time, "%%Y%%m%%d%%H%%M%%S"), ' \
+                         'spxtrlts1=strftime(%s, "%s"), ' \
+                         'spxtrlts2=strftime(_time, "%%Y%%m%%d%%H%%M%%S"), ' \
+                         'spxtrlts3=_time, ' \
                          'spxtrldata=_raw, ' \
                          'spxtrlidxn=_index, ' \
                          'spxtrlhost=host,' \
