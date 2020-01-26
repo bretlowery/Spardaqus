@@ -22,6 +22,8 @@ class SpextralIntegration:
         self.haltonerror = utils.getconfig("spextral", "config", "haltonerror", required=True)
         self.keysize = utils.getconfig("spextral", "config", "keysize", required=True, defaultvalue=32, intrange=[8, 128])
         self.name = "SpextralGenericService"
+        self.on_no_results = "exit"
+        self.results = None
 
     @abstractattribute
     def integration(self):

@@ -6,7 +6,6 @@ import string
 from time import sleep
 
 from confluent_kafka import KafkaException, KafkaError, Producer, Consumer
-from pyspark.streaming.kafka import KafkaUtils
 
 from spextral import globals
 from spextral.core.decorators import timeout_after
@@ -57,8 +56,6 @@ class Kafka(SpextralTransport):
         self.envelope = {
             "spxtrl": {
                 "meta": {
-                    "id": "%s",
-                    "info": {
                         "sent": "%s",
                         "spxv": globals.__VERSION__,
                         "spxh": {
@@ -66,9 +63,7 @@ class Kafka(SpextralTransport):
                             "fqdn": socket.getfqdn(),
                             "ips": socket.gethostbyname_ex(socket.gethostname())[-1],
                         },
-                        "bkt": ""
                     },
-                },
                 "data": [{}]
             }
         }
@@ -133,9 +128,9 @@ class Kafka(SpextralTransport):
             packit = self.envelope
             d = dict(data)  # convert OrderedDict to dict
             packit["spxtrl"]["data"] = [d]
-            packit["spxtrl"]["meta"]["id"] = data["spxtrlid"]
-            packit["spxtrl"]["meta"]["info"]["bkt"] = data["spxtrlbkt"]
-            packit["spxtrl"]["meta"]["info"]["sent"] = datetime.datetime.now().isoformat()
+            # packit["spxtrl"]["meta"]["id"] = data["spxtrlid"]
+            # packit["spxtrl"]["meta"]["info"]["bkt"] = data["spxtrlbkt"]
+            packit["spxtrl"]["meta"]["sent"] = datetime.datetime.now().isoformat()
             return str(packit).encode(encoding)
 
         que = argstuple[0]
@@ -194,17 +189,6 @@ class Kafka(SpextralTransport):
                 queue_data = None
         self._threadend()
         return instrumentation
-
-    # kafka will handle receive timeouts itself, don't need to decorate this with a timeout_after
-    def receive(self, spark_streaming_context, bucket):
-        """Receive Spextral packets from the Kafka topic (bucket) and return a Spark Stream object to recieve them."""
-        return KafkaUtils.createDirectStream(
-                spark_streaming_context,
-                [bucket],
-                {
-                    "bootstrap.servers": self.target,
-                    "group.id": str(self.groupid),
-                })
 
     @timeout_after(10, "Transport queue is empty")
     def _poll(self):
