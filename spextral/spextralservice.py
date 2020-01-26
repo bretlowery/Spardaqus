@@ -122,22 +122,23 @@ class SpextralService(SystemService):
                 info("** --profile specified; starting performance profiling")
                 info("** pstats data will be written to /var/log/yappi.%s.%s" % (globals.__NAME__, globals.__VERSION__))
             self.engine.transport.connect()
-            self.engine.endpoint.connect()
-            if self.service_breaker_test:
-                info("Service breaker test signalled; shutting down")
-            elif self.engine.endpoint.connected:
-                worker = getattr(sys.modules[__name__], self.engine.options.operation)
-                while self.runnable:
-                    results = worker(self)
-                    if self.engine.options.profile:
-                        profile.memory()
-                    if self.engine.options.operation == "dump":
-                        break
-                    if not self.engine.endpoint.results_returned and self.engine.endpoint.on_no_results == "wait":
-                        info("Waiting %d seconds before trying again..." % self.engine.endpoint.on_no_results_wait_interval)
-                        sleep(int(self.engine.endpoint.on_no_results_wait_interval))
-                self.engine.transport.close()
-                self.engine.endpoint.close()
+            if self.engine.transport.connected:
+                self.engine.endpoint.connect()
+                if self.service_breaker_test:
+                    info("Service breaker test signalled; shutting down")
+                elif self.engine.endpoint.connected:
+                    worker = getattr(sys.modules[__name__], self.engine.options.operation)
+                    while self.runnable:
+                        results = worker(self)
+                        if self.engine.options.profile:
+                            profile.memory()
+                        if self.engine.options.operation == "dump":
+                            break
+                        if not self.engine.endpoint.results_returned and self.engine.endpoint.on_no_results == "wait":
+                            info("Waiting %d seconds before trying again..." % self.engine.endpoint.on_no_results_wait_interval)
+                            sleep(int(self.engine.endpoint.on_no_results_wait_interval))
+                    self.engine.transport.close()
+                    self.engine.endpoint.close()
             if self.engine.options.profile:
                 profile.end(pstats_file)
             #
