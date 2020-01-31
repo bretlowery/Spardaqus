@@ -131,7 +131,8 @@ class Kafka(SpextralTransport):
             # packit["spxtrl"]["meta"]["id"] = data["spxtrlid"]
             # packit["spxtrl"]["meta"]["info"]["bkt"] = data["spxtrlbkt"]
             packit["spxtrl"]["meta"]["sent"] = datetime.datetime.now().isoformat()
-            return str(packit).encode(encoding)
+            jsonstr = str(packit).replace('"', '\\"').replace("'", '"')
+            return jsonstr.encode(encoding)
 
         que = argstuple[0]
         n = argstuple[1]
