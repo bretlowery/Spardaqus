@@ -140,6 +140,15 @@ def debugging():
     return sys.gettrace() is not None
 
 
+def getenviron(key):
+    k = key.upper()
+    try:
+        v = os.environ[k]
+    except KeyError:
+        v = None
+    return v
+
+
 def error(msg, onerrorexit=True):
     """ Standard error logging. """
     if msg is None:
@@ -379,14 +388,26 @@ def numcpus():
 
     return 1
 
+
 def printmsg(msg):
     """Print text to stdout."""
     print(msg, file=sys.stdout)
     sys.stdout.flush()
 
+
 def setconfig(filename, sectionname, settingname, newvalue):
     """ Sets Spextral yaml-resident config values at runtime. May be overridden in SpextralIntegration and its subclasses."""
     return _getsetyaml(filename, sectionname, settingname, newvalue)
+
+
+def setenviron(key, value):
+    k = key.upper()
+    if value:
+        os.environ[k] = value
+    else:
+        del os.environ[k]
+        value = None
+    return value
 
 
 def sequalsci(val, compareto):
