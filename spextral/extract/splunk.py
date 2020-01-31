@@ -125,14 +125,7 @@ class Splunk(SpextralEndpoint):
                 self.error("testing connection to %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
         return isconnected
 
-    def _executequery(self, dynamic_query_filter="where(1==2)", lookup=None, lookup_label=None):
-        query = None
-        if not self.connected:
-            self.connect()
-        instrumentation = self.engine.service.instrumenter.get(tag=self.integration.capitalize())
-        status = "OK"
-        rtn = "OK"
-        rlist = []
+    def _buildquery(self, dynamic_query_filter, lookup, lookup_label):
         sample_percentage = 100 if lookup else self.sample_percentage
         main_subquery = 'index=%s' % self.bucketname
         basic_filters = ""
@@ -173,7 +166,27 @@ class Splunk(SpextralEndpoint):
             query = "%s | %s" % (query, dynamic_query_filter)
         if sample_percentage < 100:
             query = "%s | where(_serial %% ceiling(100 / %d) = 0)" % (query, sample_percentage)
-        query = query.strip()
+        return query.strip()
+
+    def _getthreadcontext(self, multithread):
+        if multithread:
+            self.thread_count = self.engine.transport.threads if self.engine.transport.threads > 0 else numcpus()
+            self.thread_count = 1 if 0 < self.engine.options.limit < 10000 else self.thread_count
+            self.info("Number of transport threads set to %d" % self.thread_count)
+            thread_context = futures.ThreadPoolExecutor(self.thread_count)
+        else:
+            thread_context = nullcontext()
+        return thread_context
+
+    def _executequery(self, dynamic_query_filter="where(1==2)", lookup=None, lookup_label=None):
+        query = None
+        if not self.connected:
+            self.connect()
+        instrumentation = self.engine.service.instrumenter.get(tag=self.integration.capitalize())
+        status = "OK"
+        rtn = "OK"
+        rlist = []
+        query = self._buildquery(dynamic_query_filter, lookup, lookup_label)
         kwargs_export = {
             "count": 0,
             "maxEvents": globals.MAX_SPLUNK_BATCH_SIZE,
@@ -187,13 +200,8 @@ class Splunk(SpextralEndpoint):
         batch_end_et = None
         datareturned = False
         msg = None
-        if self.forward and not lookup:
-            self.thread_count = self.engine.transport.threads if self.engine.transport.threads > 0 else numcpus()
-            self.thread_count = 1 if 0 < self.engine.options.limit < 10000 else self.thread_count
-            self.info("Number of transport threads set to %d" % self.thread_count)
-            thread_context = futures.ThreadPoolExecutor(self.thread_count)
-        else:
-            thread_context = nullcontext()
+        multithread = self.forward and not lookup
+        thread_context = self._getthreadcontext(multithread)
         if not globals.KILLSIG:
             with thread_context:
                 with instrumentation:
