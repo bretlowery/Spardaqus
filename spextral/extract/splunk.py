@@ -303,7 +303,7 @@ class Splunk(SpextralEndpoint):
                          'spxtrlts3=_time, ' \
                          'spxtrldata=_raw, ' \
                          'spxtrlidxn=_index, ' \
-                         'spxtrlhost=host,' \
+                         'spxtrlephn=host,' \
                          'spxtrlsrc=source,' \
                          'spxtrlstyp=sourcetype, ' \
                          'spxtrlbkt="%s" ' \
