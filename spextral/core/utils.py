@@ -403,9 +403,14 @@ def setconfig(filename, sectionname, settingname, newvalue):
 def setenviron(key, value):
     k = key.upper()
     if value:
+        value = None if value.lower().strip() == "none" else value
+    if value:
         os.environ[k] = value
     else:
-        del os.environ[k]
+        try:
+            del os.environ[k]
+        except KeyError:
+            pass
         value = None
     return value
 
