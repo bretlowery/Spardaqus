@@ -1,5 +1,6 @@
 import ast
 import datetime
+import json
 from queue import Empty as QueueEmpty
 import socket
 import string
@@ -61,10 +62,10 @@ class Kafka(SpextralTransport):
                         "spxh": {
                             "name": socket.gethostname(),
                             "fqdn": socket.getfqdn(),
-                            "ips": socket.gethostbyname_ex(socket.gethostname())[-1],
+                            "ips": ",".join(socket.gethostbyname_ex(socket.gethostname())[-1]),
                         },
                     },
-                "data": [{}]
+                "data": []
             }
         }
         self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
@@ -126,13 +127,9 @@ class Kafka(SpextralTransport):
 
         def _packit(data, encoding):
             packit = self.envelope
-            d = dict(data)  # convert OrderedDict to dict
-            packit["spxtrl"]["data"] = [d]
-            # packit["spxtrl"]["meta"]["id"] = data["spxtrlid"]
-            # packit["spxtrl"]["meta"]["info"]["bkt"] = data["spxtrlbkt"]
+            packit["spxtrl"]["data"] = [dict(data)]   # convert OrderedDict to dict, then listify
             packit["spxtrl"]["meta"]["sent"] = datetime.datetime.now().isoformat()
-            jsonstr = str(packit).replace('"', '\\"').replace("'", '"')
-            return jsonstr.encode(encoding)
+            return json.dumps(packit)
 
         que = argstuple[0]
         n = argstuple[1]
@@ -205,9 +202,7 @@ class Kafka(SpextralTransport):
                 msg = self._poll()
                 if not msg:
                     break
-                msg_raw = msg.value().decode(self.engine.encoding)
-                event_dict = ast.literal_eval(msg_raw)
-                print(event_dict)
+                print(msg.value().decode(self.engine.encoding))
         except SpextralTimeoutWarning:
             pass
         except KafkaException as kx:
