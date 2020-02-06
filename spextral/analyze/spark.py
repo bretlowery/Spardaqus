@@ -14,7 +14,7 @@ from pyspark.sql.functions import *
 
 from spextral import globals
 from spextral.core.decorators import timeout_after
-from spextral.core.exceptions import SpextralTimeoutWarning, SpextralMissingJarWarning
+from spextral.core.exceptions import SpextralTimeoutWarning
 from spextral.core.metaclasses import SpextralAnalyzer
 from spextral.core.utils import getenviron, setenviron, tmpfile, getconfig, error
 
@@ -137,6 +137,8 @@ class Spark(SpextralAnalyzer):
                     required_jars = required_jars.replace(".jar", "").replace(",", " ")
                 if required_jars[:10] != "--packages":
                     required_jars = "--packages %s" % required_jars
+                if "pyspark-shell" not in required_jars:
+                    required_jars = "%s %s" % (required_jars, "pyspark-shell")
                 setenviron("PYSPARK_SUBMIT_ARGS", required_jars)
             self.info("PYSPARK_SUBMIT_ARGS=%s" % getenviron("PYSPARK_SUBMIT_ARGS"))
             #setenviron("SPARK_KAFKA_VERSION", "0.10")
