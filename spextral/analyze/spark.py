@@ -14,9 +14,9 @@ from pyspark.sql.functions import *
 
 from spextral import globals
 from spextral.core.decorators import timeout_after
-from spextral.core.exceptions import SpextralTimeoutWarning
+from spextral.core.exceptions import SpextralTimeoutWarning, SpextralMissingJarWarning
 from spextral.core.metaclasses import SpextralAnalyzer
-from spextral.core.utils import getenviron, setenviron, tmpfile, getconfig
+from spextral.core.utils import getenviron, setenviron, tmpfile, getconfig, error
 
 
 def _createlog4jpropfile():
@@ -24,10 +24,10 @@ def _createlog4jpropfile():
     with open(globals.LOG4JPROPFILE, "a") as log4jpropfile:
         log4jpropfile.write("log4j.appender.console.layout = org.apache.log4j.PatternLayout")
         log4jpropfile.write("log4j.appender.console.layout.ConversionPattern = Spextral/" + globals.__VERSION__ + " %d{yyyy-MM-dd}T%d{HH:mm:ss}: %p %c {1}: %m%n")
-        log4jpropfile.write("log4j.logger.org.eclipse.jetty = WARN")
-        log4jpropfile.write("log4j.logger.org.eclipse.jetty.util.component.AbstractLifeCycle = WARN")
-        log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkIMain$exprTyper = WARN")
-        log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkILoop$SparkILoopInterpreter = WARN")
+        log4jpropfile.write("log4j.logger.org.eclipse.jetty = ERROR")
+        log4jpropfile.write("log4j.logger.org.eclipse.jetty.util.component.AbstractLifeCycle = ERROR")
+        log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkIMain$exprTyper = ERROR")
+        log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkILoop$SparkILoopInterpreter = ERROR")
     os.chmod(globals.LOG4JPROPFILE, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)  # make it read only to everyone
 
 
@@ -52,6 +52,7 @@ class Spark(SpextralAnalyzer):
         self.limit_reached = False
         self.results_returned = True
         self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
+        self.required_jars = []
 
     @property
     def message_schema(self):
@@ -129,13 +130,17 @@ class Spark(SpextralAnalyzer):
             self.info("SPARK_LOCAL_IP=%s" % getenviron("SPARK_LOCAL_IP"))
             self.info("PYSPARK_PYTHON=%s" % getenviron("PYSPARK_PYTHON"))
             self.info("PYSPARK_DRIVER_PYTHON=%s" % getenviron("PYSPARK_DRIVER_PYTHON"))
-            required_jars = self.config("required.jars", required=True, converttolist=True, defaultvalue=[])
+            required_jars = self.config("required.jars", required=True, defaultvalue=getenviron("PYSPARK_SUBMIT_ARGS"))
             if required_jars:
-                if isinstance(required_jars, list):
-                    for jar in required_jars:
-                        jar = os.path.join(spark_home, "jars/%s" % jar)
-                        if not os.path.exists(jar):
-                            self.error("required jar '%s' is not installed on this host.")
+                required_jars = required_jars.strip().lower()
+                if "," in required_jars:
+                    required_jars = required_jars.replace(".jar", "").replace(",", " ")
+                if required_jars[:10] != "--packages":
+                    required_jars = "--packages %s" % required_jars
+                setenviron("PYSPARK_SUBMIT_ARGS", required_jars)
+            self.info("PYSPARK_SUBMIT_ARGS=%s" % getenviron("PYSPARK_SUBMIT_ARGS"))
+            #setenviron("SPARK_KAFKA_VERSION", "0.10")
+            #self.info("SPARK_KAFKA_VERSION=%s" % getenviron("SPARK_KAFKA_VERSION"))
             _createlog4jpropfile()
             sc_conf = SparkConf()
             sc_conf.setAppName(self.name)
@@ -147,8 +152,9 @@ class Spark(SpextralAnalyzer):
                 for k in sparkoptions.keys():
                     sc_conf.set(k, sparkoptions[k])
             self.sc = SparkContext(appName=self.name, conf=sc_conf)
-            self.sc._jvm.org.apache.log4j.LogManager.getLogger("org").setLevel(self.sc._jvm.org.apache.log4j.Level.WARN)
-            self.sc._jvm.org.apache.log4j.LogManager.getLogger("akka").setLevel(self.sc._jvm.org.apache.log4j.Level.WARN)
+            self.sc.setLogLevel("ERROR")
+            self.sc._jvm.org.apache.log4j.LogManager.getLogger("org").setLevel(self.sc._jvm.org.apache.log4j.Level.ERROR)
+            self.sc._jvm.org.apache.log4j.LogManager.getLogger("akka").setLevel(self.sc._jvm.org.apache.log4j.Level.ERROR)
             return sc_conf
         except SpextralTimeoutWarning as w:
             pass
@@ -161,9 +167,13 @@ class Spark(SpextralAnalyzer):
                 appName(self.name). \
                 config(conf=self._setcontext()). \
                 getOrCreate()
-            self.results = 'READY2RECIEVE'
+            if self.required_jars:
+                for jar in self.required_jars:
+                    self.session.sparkContext.addPyFile(jar)
+            self.results = '__QUERY_PENDING__'
         except Exception as e:
-            self.error("establishing %s session at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+            error("establishing %s session at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+        self.info("Connected to %s %s" % (self.integration.capitalize(), self.sc.version))
 
     @property
     def connected(self):
@@ -179,16 +189,16 @@ class Spark(SpextralAnalyzer):
                 s = self.session.readStream \
                     .format("kafka") \
                     .option("kafka.bootstrap.servers", self.engine.transport.target) \
+                    .option("kafka.partition.assignment.strategy", "range") \
                     .option("subscribe", self.bucket) \
                     .option("startingOffsets", "earliest") \
-                    .option("max.poll.records", 100) \
                     .option("maxOffsetsPerTrigger", 10000)
                 for k, v in consumer_options.items():
                     s.option("kafka.%s" % k, v)
                 stream = s.load()
         except Exception as e:
             self.error("reading from %s transport stream at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
-        results = stream \
+        self.results = stream \
             .selectExpr("CAST(value AS STRING) as spxmsgraw") \
             .select(from_json("spxmsgraw", self.message_schema)) \
             .alias("spxmsg") \
