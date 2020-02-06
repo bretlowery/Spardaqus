@@ -65,7 +65,9 @@ def _getsetyaml(fname,
                 val = c[root][settingname]
             except KeyError:
                 pass
-    if not isinstance(val, dict):
+    if not val and (isinstance(defaultvalue, dict) or isinstance(defaultvalue, list)):
+        val = defaultvalue
+    if not isinstance(val, dict) and not isinstance(val, list):
         if isinstance(val, str):
             val = defaultvalue if val.lower().strip() == "default" and defaultisdefault else val
             if val is not None:

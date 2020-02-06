@@ -1,9 +1,10 @@
-import ast
+import os
 import datetime
 import json
 from queue import Empty as QueueEmpty
 import socket
 import string
+import subprocess
 from time import sleep
 
 from confluent_kafka import KafkaException, KafkaError, Producer, Consumer
@@ -12,7 +13,7 @@ from spextral import globals
 from spextral.core.decorators import timeout_after
 from spextral.core.exceptions import SpextralTimeoutWarning
 from spextral.core.metaclasses import SpextralTransport
-from spextral.core.utils import istruthy, mergedicts
+from spextral.core.utils import istruthy, mergedicts, getenviron
 
 
 class Kafka(SpextralTransport):
@@ -79,16 +80,24 @@ class Kafka(SpextralTransport):
             bucket = 'spextral'
         return bucket[:255]
 
+    @property
+    def version(self):
+        kafka_libs = os.path.join(getenviron("KAFKA_HOME"), "libs")
+        version = subprocess.check_output("find %s -name \\*kafka_\\* | head -1 | grep -o '\\kafka[^\\\\n]*' | awk -F\"-\" '{print $2}'" % kafka_libs, shell=True)\
+            .decode('ascii')\
+            .rstrip()
+        return version
+
     def connect(self):
         """Connect to the Kafka instance specified in the extract.yaml's (when extracting) or analyze.yaml's (when analyzing) Kafka connection settings."""
         if self.engine.options.operation == "extract":
-            self.info("Connecting to %s transport server at %s as a publisher" % (self.integration.capitalize(),self.target))
+            self.info("Connecting to %s transport server at %s as a publisher" % (self.integration.capitalize(), self.target))
             self.transporter = Producer(**self.transporter_options)
         else:
-            self.info("Connecting to %s transport server at %s as a subscriber" % (self.integration.capitalize(),self.target))
+            self.info("Connecting to %s transport server at %s as a subscriber" % (self.integration.capitalize(), self.target))
             self.transporter = Consumer(**self.transporter_options)
         if self.connected:
-            self.info("Connected")
+            self.info("Connected to %s %s" % (self.integration.capitalize(), self.version))
         return
 
     @timeout_after(20)
