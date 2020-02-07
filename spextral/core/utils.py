@@ -142,12 +142,12 @@ def debugging():
     return sys.gettrace() is not None
 
 
-def getenviron(key):
+def getenviron(key, defaultvalue=None):
     k = key.upper()
     try:
         v = os.environ[k]
     except KeyError:
-        v = None
+        v = defaultvalue
     return v
 
 
