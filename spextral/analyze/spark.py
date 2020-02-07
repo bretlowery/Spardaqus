@@ -1,3 +1,4 @@
+import logging
 import os
 import stat
 import string
@@ -19,16 +20,16 @@ from spextral.core.metaclasses import SpextralAnalyzer
 from spextral.core.utils import getenviron, setenviron, tmpfile, getconfig, error
 
 
-def _createlog4jpropfile():
-    globals.LOG4JPROPFILE = tmpfile() if globals.LOG4JPROPFILE is None else globals.LOG4JPROPFILE
-    with open(globals.LOG4JPROPFILE, "a") as log4jpropfile:
-        log4jpropfile.write("log4j.appender.console.layout = org.apache.log4j.PatternLayout")
-        log4jpropfile.write("log4j.appender.console.layout.ConversionPattern = Spextral/" + globals.__VERSION__ + " %d{yyyy-MM-dd}T%d{HH:mm:ss}: %p %c {1}: %m%n")
-        log4jpropfile.write("log4j.logger.org.eclipse.jetty = ERROR")
-        log4jpropfile.write("log4j.logger.org.eclipse.jetty.util.component.AbstractLifeCycle = ERROR")
-        log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkIMain$exprTyper = ERROR")
-        log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkILoop$SparkILoopInterpreter = ERROR")
-    os.chmod(globals.LOG4JPROPFILE, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)  # make it read only to everyone
+# def _createlog4jpropfile():
+#     globals.LOG4JPROPFILE = tmpfile() if globals.LOG4JPROPFILE is None else globals.LOG4JPROPFILE
+#     with open(globals.LOG4JPROPFILE, "a") as log4jpropfile:
+#         log4jpropfile.write("log4j.appender.console.layout = org.apache.log4j.PatternLayout")
+#         log4jpropfile.write("log4j.appender.console.layout.ConversionPattern = Spextral/" + globals.__VERSION__ + " %d{yyyy-MM-dd}T%d{HH:mm:ss}: %p %c {1}: %m%n")
+#         log4jpropfile.write("log4j.logger.org.eclipse.jetty = ERROR")
+#         log4jpropfile.write("log4j.logger.org.eclipse.jetty.util.component.AbstractLifeCycle = ERROR")
+#         log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkIMain$exprTyper = ERROR")
+#         log4jpropfile.write("log4j.logger.org.apache.spark.repl.SparkILoop$SparkILoopInterpreter = ERROR")
+#     os.chmod(globals.LOG4JPROPFILE, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)  # make it read only to everyone
 
 
 class Spark(SpextralAnalyzer):
@@ -122,6 +123,14 @@ class Spark(SpextralAnalyzer):
                     os.mkdir("/tmp/spark-events")
                 except OSError:
                     pass
+            logging_level = self.config("logging.level", required=True, defaultvalue="ERROR", choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING"]).upper()
+            logging_level2 = logging.CRITICAL if logging_level == "CRITICAL" \
+                else logging.DEBUG if logging_level == "DEBUG" \
+                else logging.ERROR if logging_level == "ERROR" \
+                else logging.FATAL if logging_level == "FATAL" \
+                else logging.INFO if logging_level == "INFO" \
+                else logging.WARNING if logging_level in ["WARN", "WARNING"] \
+                else logging.ERROR
             spark_home = setenviron("SPARK_HOME", self.config("home", required=False, defaultvalue=getenviron("SPARK_HOME")))
             setenviron("PYSPARK_PYTHON", self.config("pyspark.python", required=False, defaultvalue=getenviron("PYSPARK_PYTHON")))
             setenviron("PYSPARK_DRIVER_PYTHON", self.config("pyspark.driver.python", required=False, defaultvalue=getenviron("PYSPARK_DRIVER_PYTHON")))
@@ -130,33 +139,36 @@ class Spark(SpextralAnalyzer):
             self.info("SPARK_LOCAL_IP=%s" % getenviron("SPARK_LOCAL_IP"))
             self.info("PYSPARK_PYTHON=%s" % getenviron("PYSPARK_PYTHON"))
             self.info("PYSPARK_DRIVER_PYTHON=%s" % getenviron("PYSPARK_DRIVER_PYTHON"))
-            required_jars = self.config("required.jars", required=True, defaultvalue=getenviron("PYSPARK_SUBMIT_ARGS"))
-            if required_jars:
-                required_jars = required_jars.strip().lower()
-                if "," in required_jars:
-                    required_jars = required_jars.replace(".jar", "").replace(",", " ")
-                if required_jars[:10] != "--packages":
-                    required_jars = "--packages %s" % required_jars
-                if "pyspark-shell" not in required_jars:
-                    required_jars = "%s %s" % (required_jars, "pyspark-shell")
-                setenviron("PYSPARK_SUBMIT_ARGS", required_jars)
+            os_pyspark_submit_list = getenviron("PYSPARK_SUBMIT_ARGS", "").replace("--packages", "").strip().split(" ")
+            pyspark_submit_list = globals.PYSPARK_REQUIRED_PACKAGES.strip().split(" ")
+            for pkg in os_pyspark_submit_list:
+                if pkg not in pyspark_submit_list:
+                    pyspark_submit_list.append(pkg)
+            pyspark_submit_args = "--packages"
+            for pkg in pyspark_submit_list:
+                pyspark_submit_args = "%s %s" % (pyspark_submit_args, pkg)
+            setenviron("PYSPARK_SUBMIT_ARGS", pyspark_submit_args)
             self.info("PYSPARK_SUBMIT_ARGS=%s" % getenviron("PYSPARK_SUBMIT_ARGS"))
-            #setenviron("SPARK_KAFKA_VERSION", "0.10")
-            #self.info("SPARK_KAFKA_VERSION=%s" % getenviron("SPARK_KAFKA_VERSION"))
-            _createlog4jpropfile()
+            s_logger = logging.getLogger('py4j.java_gateway')
+            s_logger.setLevel(logging_level2)
             sc_conf = SparkConf()
             sc_conf.setAppName(self.name)
             sc_conf.setMaster(self.target)
-            sc_conf.set("spark.executor.extraJavaOptions", "\"-Dlog4j.configuration=file://%s\"" % globals.LOG4JPROPFILE)
-            sc_conf.set("spark.driver.extraJavaOptions", "\"-Dlog4j.configuration=file://%s\"" % globals.LOG4JPROPFILE)
             sparkoptions = self.config("sparkcontext.options", required=False, defaultvalue=None)
             if sparkoptions:
                 for k in sparkoptions.keys():
                     sc_conf.set(k, sparkoptions[k])
             self.sc = SparkContext(appName=self.name, conf=sc_conf)
-            self.sc.setLogLevel("ERROR")
-            self.sc._jvm.org.apache.log4j.LogManager.getLogger("org").setLevel(self.sc._jvm.org.apache.log4j.Level.ERROR)
-            self.sc._jvm.org.apache.log4j.LogManager.getLogger("akka").setLevel(self.sc._jvm.org.apache.log4j.Level.ERROR)
+            self.sc.setLogLevel(logging_level)
+            logging_level3 = self.sc._jvm.org.apache.log4j.Level.CRITICAL if logging_level == "CRITICAL" \
+                else self.sc._jvm.org.apache.log4j.Level.DEBUG if logging_level == "DEBUG" \
+                else self.sc._jvm.org.apache.log4j.Level.ERROR if logging_level == "ERROR" \
+                else self.sc._jvm.org.apache.log4j.Level.FATAL if logging_level == "FATAL" \
+                else self.sc._jvm.org.apache.log4j.Level.INFO if logging_level == "INFO" \
+                else self.sc._jvm.org.apache.log4j.Level.WARNING if logging_level in ["WARN", "WARNING"] \
+                else self.sc._jvm.org.apache.log4j.Level.ERROR
+            self.sc._jvm.org.apache.log4j.LogManager.getLogger("org").setLevel(logging_level3)
+            self.sc._jvm.org.apache.log4j.LogManager.getLogger("akka").setLevel(logging_level3)
             return sc_conf
         except SpextralTimeoutWarning as w:
             pass
@@ -164,14 +176,15 @@ class Spark(SpextralAnalyzer):
     def connect(self, **kwargs):
         self.info("Connecting to %s analyze cluster at %s" % (self.integration.capitalize(), self.target))
         try:
-            self.session = SparkSession. \
-                builder. \
-                appName(self.name). \
-                config(conf=self._setcontext()). \
-                getOrCreate()
-            if self.required_jars:
-                for jar in self.required_jars:
-                    self.session.sparkContext.addPyFile(jar)
+            self.session = SparkSession \
+                .builder \
+                .appName(self.name) \
+                .config(conf=self._setcontext()) \
+                .getOrCreate()
+                # .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.4 org.apache.spark:spark-sql-0-10_2.11:2.4.4") \
+            #if self.required_jars:
+            #    for jar in self.required_jars:
+            #        self.session.sparkContext.addPyFile(jar)
             self.results = '__QUERY_PENDING__'
         except Exception as e:
             error("establishing %s session at %s: %s" % (self.integration.capitalize(), self.target, str(e)))

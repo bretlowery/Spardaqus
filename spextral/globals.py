@@ -10,7 +10,10 @@ ROOT_DIR = os.path.dirname(os.path.abspath(__file__))
 EXITONERROR = True
 RSS_MEMORY_BASE = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
 RSS_MEMORY_DIVISOR = 1024.0 if sys.platform == "darwin" else 1.0 if sys.platform == "linux" else 1.0
-
+PYSPARK_REQUIRED_PACKAGES = "org.apache.spark:spark-sql-kafka-0-10_2.11:2.4.4 " \
+                            "pyspark-shell " \
+                            "--driver-class-path /opt/kafka/kafka-clients-0.10.0.1.jar " \
+                            "--driver-library-path /opt/kafka/kafka-clients-0.10.0.1.jar"
 
 # Dynamically changed by the system; don't mess with these
 LOGGER = None
