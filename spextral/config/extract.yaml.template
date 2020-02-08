@@ -3,14 +3,14 @@ spextral:
     endpoint: splunk
     transport: kafka
   splunk:
-    host: localhost
-    port: 8089
-    username: *****
-    password: *****
-    index: *****
+    host: <hostname>
+    port: <port>
+    username: <splunk-username>
+    password: <splunk-password>
+    index: <indexname>>
     host_filter: none
     source_filter: none
-    sourcetype_filter: access_combined
+    sourcetype_filter: none
     query_filter: none
     query_timeout: 30
     sample_percentage: 100
@@ -30,8 +30,8 @@ spextral:
     enable_query_comment: true
     query_comment: If enabled, this is prefixed to every Splunk query issued
   kafka:
-    bootstrap.servers: localhost:9092
-    group.id: 0
+    bootstrap.servers: <hostname>:<port>
+    group.id: <group-id>
     topic: default
     producer.options: {'auto.offset.reset': 'earliest',
                        'message.timeout.ms': 30000,

@@ -7,12 +7,13 @@ spextral:
     pyspark.local.ip: 127.0.0.1
     pyspark.python: /usr/local/bin/python3
     pyspark.driver.python: /usr/local/bin/python3
-    required.jars: spark-sql-kafka-0-10_2.11-2.4.4.jar
     master: local[*]  #  Master must either be yarn, spark, mesos, k8s, or local[n]
     sparkcontext.options: {}
+    logging.level: INFO
   kafka:
-    bootstrap.servers: localhost:9092
+    bootstrap.servers: 127.0.0.1:9092
     group.id: 0
+    topic: default
     consumer.options: {
       # 'group.id': 0,
       # 'security.protocol': 'ssl',
