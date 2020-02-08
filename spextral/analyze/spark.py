@@ -240,6 +240,7 @@ class Spark(SpextralAnalyzer):
             .select("spxmsg.*") \
             .writeStream \
             .format("console") \
+            .option('truncate', 'false') \
             .start() \
             .awaitTermination()
 
