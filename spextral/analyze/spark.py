@@ -1,6 +1,6 @@
+from functools import lru_cache
 import logging
 import os
-import stat
 import string
 import sys
 
@@ -45,9 +45,11 @@ class Spark(SpextralAnalyzer):
         self.session = None
         self.limit_reached = False
         self.results_returned = True
-        self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
+        self.timeoutmsg = "%s operation failed: connection refused by %s at %s" \
+                          % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
         self.required_jars = []
-        self.spark_logging_level = self.config("logging.level", required=True, defaultvalue="ERROR", choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING"]).upper()
+        self.spark_logging_level = self.config("logging.level", required=True, defaultvalue="ERROR",
+                                               choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING"]).upper()
 
     @property
     def schema(self):
@@ -135,7 +137,7 @@ class Spark(SpextralAnalyzer):
                        (spark_conf_file, xc, spark_conf_file, "/your/server/path/%s" % xc, "/your/server/path/%s" % xc))
         return True
 
-    def _preparespark(self):
+    def _prepare(self):
         spark_prepared = boolish(getenviron("SPEXTRAL_SPARK_PREPARED", "False"))
         if not spark_prepared:
             if sys.platform == "darwin":
@@ -199,7 +201,7 @@ class Spark(SpextralAnalyzer):
 
     def connect(self, **kwargs):
         self.info("Connecting to %s analyze cluster at %s" % (self.integration.capitalize(), self.target))
-        self._preparespark()
+        self._prepare()
         try:
             self.session = SparkSession \
                 .builder \
@@ -217,7 +219,9 @@ class Spark(SpextralAnalyzer):
             return True
         return False
 
-    def analyze(self):
+    @property
+    @lru_cache()
+    def _stream(self):
         stream = None
         try:
             if self.engine.transport.integration == "kafka":
@@ -233,7 +237,10 @@ class Spark(SpextralAnalyzer):
                 stream = s.load()
         except Exception as e:
             self.error("reading from %s transport stream at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
-        self.results = stream \
+        return stream
+
+    def analyze(self):
+        self.results = self._stream \
             .selectExpr("CAST(value AS STRING) as spxmsgraw") \
             .select(from_json("spxmsgraw", self.schema)) \
             .alias("spxmsg") \
@@ -243,7 +250,6 @@ class Spark(SpextralAnalyzer):
             .option('truncate', 'false') \
             .start() \
             .awaitTermination()
-
 
     def close(self, **kwargs):
         pass
