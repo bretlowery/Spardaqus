@@ -23,6 +23,7 @@ def _getsetyaml(fname,
                 quotestrings=False,
                 converttolist=False):
     """ Gets or sets Spextral yaml-resident config values. Do not call directly. Overridden by utils.getconfig and in SpextralIntegration and its subclasses."""
+
     def _load(_icf, _c=None):
         if _c is not None:
             with open(_icf, "w") as _f:
@@ -209,6 +210,19 @@ def info(msg):
         printmsg(msg)
 
 
+def isreadable(path):
+    """ Returns True if the current user context has permission to read data from the passed path value."""
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as tmp:
+                dummy = tmp.read()
+                tmp.close()
+            return True
+        except:
+            pass
+    return False
+
+
 def istruthy(val):
     """ Returns True if the passed val is T, True, Y, Yes, 1, or boolean True.
     Returns False if the passed val is boolean False or a string that is not T, True, Y, Yes, or 1, or an integer that is not 1.
@@ -305,7 +319,7 @@ def numcpus():
     # https://github.com/giampaolo/psutil
     try:
         import psutil
-        return psutil.cpu_count()   # psutil.NUM_CPUS on old versions
+        return psutil.cpu_count()  # psutil.NUM_CPUS on old versions
     except (ImportError, AttributeError):
         pass
 
@@ -452,7 +466,7 @@ def supper(val):
 def tmpfile():
     """Generates a random file name, creates the file in /tmp, and returns the filespec to the caller."""
     file = '/tmp/%s.spx' % str(uuid.uuid4())
-    #wipe(file)
+    # wipe(file)
     Path(file).touch()
     return file
 
