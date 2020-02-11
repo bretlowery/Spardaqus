@@ -19,13 +19,13 @@ from spextral.core.utils import \
 from spextral.core.state import Redis as StateManager
 
 
-def dump(serviceinstance):
+def analyze(serviceinstance):
     """
-    Dump wrapper function
+    Analysis wrapper function
     :param serviceinstance:
     :return:
     """
-    return serviceinstance.engine.transport.dump()
+    return serviceinstance.engine.endpoint.analyze()
 
 
 def extract(serviceinstance):
@@ -37,13 +37,31 @@ def extract(serviceinstance):
     return serviceinstance.engine.endpoint.extract()
 
 
-def analyze(serviceinstance):
+def dumpanalyze(serviceinstance):
     """
-    Analysis wrapper function
+    Dump analyze wrapper function
     :param serviceinstance:
     :return:
     """
-    return serviceinstance.engine.endpoint.analyze()
+    return serviceinstance.engine.endpoint.dump()
+
+
+def dumpextract(serviceinstance):
+    """
+    Dump extract wrapper function
+    :param serviceinstance:
+    :return:
+    """
+    return serviceinstance.engine.endpoint.extract()
+
+
+def dumptransport(serviceinstance):
+    """
+    Extract wrapper function
+    :param serviceinstance:
+    :return:
+    """
+    return serviceinstance.engine.transport.dump()
 
 
 class SpextralService(SystemService):
@@ -65,7 +83,6 @@ class SpextralService(SystemService):
         self.instrumenter = InstrumentationManager(engine=self.engine)
 
     def is_running(self):
-
         if debugging:
             return False
         else:
@@ -76,7 +93,7 @@ class SpextralService(SystemService):
         return not globals.KILLSIG \
             and self.instrumenter.status == "OK" \
             and (
-                   self.engine.endpoint.connected
+                   (self.engine.endpoint.connected or self.engine.operation == "dumptransport")
                    and not (self.engine.endpoint.on_no_results == "exit" and not self.engine.endpoint.results)
                    and not self.engine.endpoint.limit_reached
                ) \
@@ -123,16 +140,17 @@ class SpextralService(SystemService):
                 info("** pstats data will be written to /var/log/yappi.%s.%s" % (globals.__NAME__, globals.__VERSION__))
             self.engine.transport.connect()
             if self.engine.transport.connected:
-                self.engine.endpoint.connect()
+                if not self.engine.worker == "dumptransport":
+                    self.engine.endpoint.connect()
                 if self.service_breaker_test:
                     info("Service breaker test signalled; shutting down")
-                elif self.engine.endpoint.connected:
-                    worker = getattr(sys.modules[__name__], self.engine.options.operation)
+                elif self.engine.endpoint.connected or self.engine.worker == "dumptransport":
+                    worker = getattr(sys.modules[__name__], self.engine.worker)
                     while self.runnable:
                         results = worker(self)
                         if self.engine.options.profile:
                             profile.memory()
-                        if self.engine.options.operation == "dump":
+                        if "dump" in self.engine.options.command:
                             break
                         if not self.engine.endpoint.results_returned and self.engine.endpoint.on_no_results == "wait":
                             info("Waiting %d seconds before trying again..." % self.engine.endpoint.on_no_results_wait_interval)

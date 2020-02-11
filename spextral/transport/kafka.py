@@ -90,7 +90,7 @@ class Kafka(SpextralTransport):
 
     def connect(self):
         """Connect to the Kafka instance specified in the extract.yaml's (when extracting) or analyze.yaml's (when analyzing) Kafka connection settings."""
-        if self.engine.options.operation == "extract":
+        if self.engine.worker == "extract":
             self.info("Connecting to %s transport server at %s as a publisher" % (self.integration.capitalize(), self.target))
             self.transporter = Producer(**self.transporter_options)
         else:

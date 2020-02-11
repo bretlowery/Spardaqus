@@ -23,18 +23,25 @@ class SpextralEngine:
     Main starting point and controlling class for Spextral. Creates an instance of the appropriate service locally (extractor, analyzer, etc)
     based on the passed commandline startup values. Handles start, stop logic.
     """
+
     def config(self, setting, required=True, defaultvalue=0, choices=None, intrange=None, quotestrings=False):
         return getconfig(self.options.operation, self.options.operation, setting, required=required, defaultvalue=defaultvalue, choices=choices, intrange=intrange, quotestrings=quotestrings)
 
     def __init__(self):
-        argz = argparse.ArgumentParser(usage="spextralcmd [options] [command] [extract | analyze | dump [fromtransportname]")
+        argz = argparse.ArgumentParser(usage="spextralcmd "
+                                             "[options] "
+                                             "["
+                                                "[start | stop | interactive] [extract | analyze]"
+                                                " | "
+                                                "dump [extract | analyze | transport [fromextract | fromanalyze]"
+                                             "]")
         argz.add_argument("command",
                           nargs='?',
                           default=None)
         argz.add_argument("operation",
                           nargs='?',
                           default=None)
-        argz.add_argument("fromtransportname",
+        argz.add_argument("option",
                           nargs='?',
                           default="none")
         argz.add_argument("--init",
@@ -56,38 +63,85 @@ class SpextralEngine:
         try:
             self.options.command = xlatearg(self.options.command)
             self.options.operation = xlatearg(self.options.operation)
+            self.options.option = xlatearg(self.options.option)
         except IndexError:
             self.options.command = None
             self.name = None
             pass
-        if not self.options.command or not self.options.operation:
-            error("No command and/or service name provided")
-        if self.options.command not in ['start', 'stop', 'status', 'test', 'interactive']:
-            error("Invalid command '%s' provided" % self.options.command)
-        if self.options.operation not in ['extract', 'analyze', 'dump']:
-            error("invalid operation name '%s' provided" % self.options.operation)
-        info("Initializing Spextral")
+        self.endpoint = None
+        self.transport = None
+        self.encoding = None
+        self.service = None
+        self.worker = None
+        self.scrub_inputs()
+        info("Halting Spextral") if self.options.command == "stop" else info("Initializing Spextral")
         if self.options.profile:
             profile.memory()
         if debugging():
             info("Debugging mode detected")
-        if self.options.operation in ['extract', 'analyze']:
-            self.endpointname = self.config("endpoint")
-            endpointclass = getattr(importlib.import_module("spextral.%s.%s" % (self.options.operation, self.endpointname)), self.endpointname.capitalize())
-            self.endpoint = endpointclass(self)
-            self.endpoint.name = "Spextral%s%s/%s" % (self.endpoint.integration.capitalize(), self.options.operation.capitalize(), globals.__VERSION__)
-            self.transportname = self.config("transport")
-        elif self.options.operation in ['dump']:
-            self.endpoint = NullEndpoint(self,  self.options.fromtransportname.lower())
-            self.endpoint.name = "Spextral%s%s/%s" % ("TransportDump", "", globals.__VERSION__)
-            self.transportname = self.options.fromtransportname.lower()
-        transportclass = getattr(importlib.import_module("spextral.transport.%s" % self.transportname), self.transportname.capitalize())
+        self.create_service_topology()
+        self.create_service_instance()
+        return
+
+    def scrub_inputs(self):
+        if not self.options.command or not self.options.operation:
+            error("Insufficient arguments provided")
+        if self.options.command not in ['start', 'stop', 'interactive', 'dump']:
+            error("Invalid command '%s'; must be one of: 'start', 'stop', 'interactive', 'dump'" % self.options.command)
+        elif self.options.command in ['start', 'stop', 'interactive']:
+            if self.options.operation not in ['extract', 'analyze']:
+                error("Invalid operation '%s' for command '%s' provided; must be one of: 'extract', 'analyze'" % (self.options.operation, self.options.command))
+        elif self.options.command == "dump":
+            if self.options.operation not in ['extract', 'analyze', 'transport']:
+                error("Invalid dump operation '%s' provided; must be one of: 'extract', 'analyze', 'transport'" % self.options.operation)
+        if self.options.option:
+            if self.options.command in ['dump']:
+                if self.options.operation in ['transport']:
+                    if self.options.option not in ['fromextract', 'fromanalyze']:
+                        if self.options.option == "none":
+                            error("Either 'fromextract' or 'fromanalyze' must be specified when using dump transport")
+                        else:
+                            error("Invalid dump transport option '%s' provided; must be either 'fromextract' or 'fromanalyze'" % self.options.option)
+                elif self.options.option not in ['none']:
+                    error("Invalid or incomplete dump option '%s' provided" % self.options.option)
+            elif self.options.option not in ['none']:
+                error("Invalid or incomplete option '%s' provided" % self.options.option)
+        elif self.options.command in ['dump'] and self.options.operation in ['transport']:
+            error("Either 'fromextract' or 'fromanalyze' must be specified when using dump transport")
+        if self.options.command in ["dump"]:
+            if self.options.operation in ['transport']:
+                self.worker = "dumptransport"
+                if self.options.option == 'fromanalyze':
+                    self.options.operation = "analyze"
+                elif self.options.option == 'fromextract':
+                    self.options.operation = "extract"
+            else:
+                self.worker = "dump%s" % self.options.operation
+        else:
+            self.worker = self.options.operation
+
+    def create_service_topology(self):
+        tn = self.config("transport")
+        epn = self.config("endpoint")
+        if self.worker == "dumptransport":
+            self.endpoint = NullEndpoint(self, epn)
+            self.endpoint.name = "SpextralDump%s/%s" % (tn.capitalize(), globals.__VERSION__)
+        else:
+            epclass = getattr(importlib.import_module("spextral.%s.%s" % (self.options.operation, epn)), epn.capitalize())
+            self.endpoint = epclass(self)
+            if self.options.command in ["dump"]:
+                self.endpoint.name = "SpextralDump%s/%s" % (epn.capitalize(), globals.__VERSION__)
+            else:
+                self.endpoint.name = "Spextral%s%s/%s" % (self.endpoint.integration.capitalize(), self.options.operation.capitalize(), globals.__VERSION__)
+        transportclass = getattr(importlib.import_module("spextral.transport.%s" % tn), tn.capitalize())
         self.transport = transportclass(self)
         self.transport.name = self.endpoint.name
+
+    def create_service_instance(self):
         self.encoding = getconfig("spextral", "config", "encoding", defaultvalue="utf-8")
         self.service = SpextralService(engine=self, pid_dir="/tmp", name=self.endpoint.name)
 
-    def exit_actions(self):
+    def exit(self):
         if self.options.profile:
             x = 1024.0 if sys.platform == "darwin" else 1.0 if sys.platform == "linux" else 1.0
             info("\n\r%s MB maximum (peak) memory used" % str(round(globals.MAX_RSS_MEMORY_USED / 1024.0 / x, 3)))
@@ -97,7 +151,7 @@ def halt(engine, rtncode=0):
     globals.KILLSIG = True
     if engine:
         if rtncode == 0:
-            engine.exit_actions()
+            engine.exit()
         if engine.service and not debugging:
             try:
                 engine.service.stop()
@@ -111,6 +165,8 @@ def main():
     engine = SpextralEngine()
     try:
         if engine.options.command == "interactive":
+            engine.service.run()
+        elif "dump" in engine.options.command:
             engine.service.run()
         elif engine.options.command == "start":
             engine.service.run() if debugging else engine.service.start()

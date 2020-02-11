@@ -2,6 +2,7 @@ import concurrent.futures as futures
 from contextlib import nullcontext
 import hashlib
 import io
+import json
 from time import sleep
 
 import splunklib.client as client
@@ -224,7 +225,10 @@ class Splunk(SpextralEndpoint):
                                     if self.forward:
                                         if self.grand_total_sent == 0:
                                             self._energizetransporters(thread_context)
-                                        self.engine.service.que.put(r)
+                                        if "dump" in self.engine.worker:
+                                            print(json.dumps(r))
+                                        else:
+                                            self.engine.service.que.put(r)
                                     self.grand_total_sent += 1
                                     instrumentation.increment()
                                     if instrumentation.counter % 10000 == 0:

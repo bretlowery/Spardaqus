@@ -239,7 +239,7 @@ class Spark(SpextralAnalyzer):
             self.error("reading from %s transport stream at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
         return stream
 
-    def analyze(self):
+    def dump(self):
         self.results = self._stream \
             .selectExpr("CAST(value AS STRING) as spxmsgraw") \
             .select(from_json("spxmsgraw", self.schema)) \
