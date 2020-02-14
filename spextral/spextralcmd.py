@@ -6,7 +6,7 @@ from time import sleep
 
 from spextral import globals
 from spextral.spextralservice import SpextralService
-from spextral.core.metaclasses import NullEndpoint
+from spextral.core.metaclasses import SpextralNullEndpoint
 import spextral.core.profiling as profile
 from spextral.core.utils import \
     debugging, \
@@ -124,7 +124,7 @@ class SpextralEngine:
         tn = self.config("transport")
         epn = self.config("endpoint")
         if self.worker == "dumptransport":
-            self.endpoint = NullEndpoint(self, epn)
+            self.endpoint = SpextralNullEndpoint(self, epn)
             self.endpoint.name = "SpextralDump%s/%s" % (tn.capitalize(), globals.__VERSION__)
         else:
             epclass = getattr(importlib.import_module("spextral.%s.%s" % (self.options.operation, epn)), epn.capitalize())
@@ -147,26 +147,10 @@ class SpextralEngine:
             info("\n\r%s MB maximum (peak) memory used" % str(round(globals.MAX_RSS_MEMORY_USED / 1024.0 / x, 3)))
 
 
-def halt(engine, rtncode=0):
-    globals.KILLSIG = True
-    if engine:
-        if rtncode == 0:
-            engine.exit()
-        if engine.service and not debugging:
-            try:
-                engine.service.stop()
-            except:
-                pass
-    info("Finished (code %d)" % rtncode)
-    os._exit(rtncode)
-
-
 def main():
     engine = SpextralEngine()
     try:
-        if engine.options.command == "interactive":
-            engine.service.run()
-        elif "dump" in engine.options.command:
+        if engine.options.command in ["dump", "interactive"]:
             engine.service.run()
         elif engine.options.command == "start":
             engine.service.run() if debugging else engine.service.start()
@@ -207,14 +191,24 @@ def main():
         else:
             error("Invalid command")
     except SystemError:
-        if globals.LOG4JPROPFILE:
-            wipe(globals.LOG4JPROPFILE)
         halt(engine, 1)
     finally:
-        if globals.LOG4JPROPFILE:
-            wipe(globals.LOG4JPROPFILE)
         halt(engine, 0)
     return
+
+
+def halt(engine, rtncode=0):
+    globals.KILLSIG = True
+    if engine:
+        if rtncode == 0:
+            engine.exit()
+        if engine.service and not debugging:
+            try:
+                engine.service.stop()
+            except:
+                pass
+    info("Finished (code %d)" % rtncode)
+    os._exit(rtncode)
 
 
 if __name__ == "__main__":
