@@ -41,6 +41,14 @@ class SpextralIntegration:
     def haltonerror(self):
         pass
 
+    @abstractattribute
+    def timeout(self):
+        pass
+
+    @abstractattribute
+    def timeoutmsg(self):
+        pass
+
     def config(self, setting, required=False, defaultvalue=0, choices=None, intrange=None, quotestrings=False, converttolist=False):
         if self.engine.options.operation == "dump":
             return utils.getconfig("analyze", self.integration, setting, required=required, defaultvalue=defaultvalue,
@@ -90,13 +98,9 @@ class SpextralEndpoint(SpextralIntegration):
     def connected(self):
         return
 
-    @abstractattribute
-    def connection_attempts(self):
-        pass
-
-    @abstractattribute
-    def envelope(self):
-        pass
+    @abstractmethod
+    def dump(self, **kwargs):
+        return
 
     @abstractattribute
     def key(self):
@@ -132,10 +136,6 @@ class SpextralEndpoint(SpextralIntegration):
 
     @abstractattribute
     def target(self):
-        pass
-
-    @abstractattribute
-    def timeout(self):
         pass
 
     @abstractattribute
@@ -237,10 +237,6 @@ class SpextralTransport(SpextralIntegration):
     def threads(self):
         return
 
-    @abstractattribute
-    def timeoutmsg(self):
-        pass
-
     @abstractmethod
     def send(self, tuple):
         return
@@ -267,41 +263,53 @@ class SpextralAnalyzer(SpextralIntegration):
     """
     __metaclass__ = ABCMeta
 
-    # @abstractattribute
-    # def closed(self):
-    #     return False
-    #
-    # @abstractmethod
-    # def close(self):
-    #     return
-    #
-    # @abstractattribute
-    # def connected(self):
-    #     return
-    #
+    @abstractmethod
+    def analyze(self, **kwargs):
+        return
+
+    @abstractattribute
+    def bucket(self):
+        pass
+
+    @abstractattribute
+    def bucketname(self):
+        pass
+
     @abstractmethod
     def connect(self, **kwargs):
         return
-    #
-    # @abstractmethod
-    # def getbucket(self):
-    #     return
-    #
-    # @abstractmethod
-    # def getbuckets(self):
-    #     return
-    #
-    # @abstractattribute
-    # def idempotence(self):
-    #     return
-    #
-    # @abstractattribute
-    # def json(self):
-    #     return
-    #
-    # @abstractattribute
-    # def target(self):
-    #     return
+
+    @abstractattribute
+    def connected(self):
+        return
+
+    @abstractmethod
+    def dump(self, **kwargs):
+        return
+
+    @abstractmethod
+    def getbucket(self):
+        return
+
+    @abstractattribute
+    def key(self):
+        pass
+
+    @abstractattribute
+    def limit_reached(self):
+        pass
+
+    @abstractattribute
+    def results_returned(self):
+        pass
+
+    @abstractattribute
+    def schema(self):
+        pass
+
+    @abstractattribute
+    def servicename(self):
+        pass
 
     def __init__(self, integration):
         super().__init__(integration)
@@ -309,7 +317,7 @@ class SpextralAnalyzer(SpextralIntegration):
         return
 
 
-class NullEndpoint(SpextralEndpoint):
+class SpextralNullEndpoint(SpextralEndpoint):
 
     def __init__(self, engine, integration):
         self.engine = engine
