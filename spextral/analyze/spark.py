@@ -41,7 +41,7 @@ class Spark(SpextralAnalyzer):
                           % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
         self.required_jars = []
         self.spark_logging_level = self.config("logging.level", required=True, defaultvalue="ERROR",
-                                               choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING"]).upper()
+                                               choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING", "OFF"]).upper()
 
     def getbucket(self):
         configbucket = self.config("topic", required=False, defaultvalue=None)
@@ -171,14 +171,14 @@ class Spark(SpextralAnalyzer):
             )
             setenviron("PYSPARK_SUBMIT_ARGS", pyspark_submit_args)
             self.info("PYSPARK_SUBMIT_ARGS=%s" % getenviron("PYSPARK_SUBMIT_ARGS"))
-            # s_logger = logging.getLogger('py4j.java_gateway')
-            # s_logger.setLevel(logging.CRITICAL if self.spark_logging_level == "CRITICAL"
-            #                   else logging.DEBUG if self.spark_logging_level == "DEBUG"
-            #                   else logging.ERROR if self.spark_logging_level == "ERROR"
-            #                   else logging.FATAL if self.spark_logging_level == "FATAL"
-            #                   else logging.INFO if self.spark_logging_level == "INFO"
-            #                   else logging.WARN if self.spark_logging_level in ["WARN", "WARNING"]
-            #                   else logging.ERROR)
+            s_logger = logging.getLogger('py4j')
+            s_logger.setLevel(logging.CRITICAL if self.spark_logging_level == "CRITICAL"
+                              else logging.DEBUG if self.spark_logging_level == "DEBUG"
+                              else logging.ERROR if self.spark_logging_level == "ERROR"
+                              else logging.FATAL if self.spark_logging_level == "FATAL"
+                              else logging.INFO if self.spark_logging_level == "INFO"
+                              else logging.WARN if self.spark_logging_level in ["WARN", "WARNING"]
+                              else logging.OFF)
             setenviron("SPEXTRAL_SPARK_PREPARED", "True")
 
     @timeout_after(60)
@@ -261,4 +261,13 @@ class Spark(SpextralAnalyzer):
         pass
 
     def analyze(self):
-        pass
+        self.results = self._stream \
+            .selectExpr("CAST(value AS STRING) as spxmsgraw") \
+            .select(from_json("spxmsgraw", self.schema).alias("spxmsg")) \
+            .select("spxmsg.spxtrl.data.spxtrldata") \
+            .writeStream \
+            .format("console") \
+            .option('truncate', 'false') \
+            .start() \
+            .awaitTermination()
+

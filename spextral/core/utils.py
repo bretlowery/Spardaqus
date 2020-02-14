@@ -6,6 +6,7 @@ import subprocess
 import sys
 import uuid
 import yaml
+from yaml.resolver import Resolver
 
 from spextral import globals
 
@@ -24,7 +25,22 @@ def _getsetyaml(fname,
                 converttolist=False):
     """ Gets or sets Spextral yaml-resident config values. Do not call directly. Overridden by utils.getconfig and in SpextralIntegration and its subclasses."""
 
-    def _load(_icf, _c=None):
+    def __customizeyaml():
+        #
+        # Remove On, Off from being loaded as Boolean False from YAML files; instead, load as strings On, OFf
+        # This is to allow logging.level to be set to OFF (string) in Spextral's analyze.yaml
+        # See https://stackoverflow.com/questions/36463531/pyyaml-automatically-converting-certain-keys-to-boolean-values
+        #
+        for ch in "Oo":
+            if len(Resolver.yaml_implicit_resolvers[ch]) == 1:
+                del Resolver.yaml_implicit_resolvers[ch]
+            else:
+                Resolver.yaml_implicit_resolvers[ch] = [x for x in Resolver.yaml_implicit_resolvers[ch] if 'bool' not in x[0]]
+        #
+        #
+        return
+
+    def __load(_icf, _c=None):
         if _c is not None:
             with open(_icf, "w") as _f:
                 yaml.safe_dump(_c, _f, default_flow_style=False)
@@ -32,18 +48,19 @@ def _getsetyaml(fname,
         try:
             with open(_icf, "r") as _f:
                 if len(globals.SETTINGS_CACHE) == 0:
+                    __customizeyaml()
                     _c = yaml.safe_load(_f)
+                    globals.SETTINGS_CACHE = _c
                 elif fname not in globals.SETTINGS_CACHE.keys():
                     _c = mergedicts(globals.SETTINGS_CACHE, yaml.safe_load(_f))
-                else:
-                    _c = globals.SETTINGS_CACHE
+                    globals.SETTINGS_CACHE = _c
         except Exception as e:
             error("Error reading config file '%s': %s" % (_icf, str(e)))
-        return _c
+        return globals.SETTINGS_CACHE
 
     fname = fname.strip().lower()
     cf = os.path.join(globals.ROOT_DIR, 'config/%s.yaml' % fname)
-    c = _load(cf)
+    c = __load(cf)
     root = "spextral"
     if not settingname:
         val = c[root][section]
@@ -53,7 +70,7 @@ def _getsetyaml(fname,
         if section:
             if newvalue is not None:
                 c[root][section][settingname] = sstrip(newvalue)
-                c = _load(cf, c)
+                c = __load(cf, c)
             try:
                 val = c[root][section][settingname]
             except KeyError:
@@ -61,7 +78,7 @@ def _getsetyaml(fname,
         else:
             if newvalue is not None:
                 c[root][settingname] = sstrip(newvalue)
-                c = _load(cf, c)
+                c = __load(cf, c)
             try:
                 val = c[root][settingname]
             except KeyError:
