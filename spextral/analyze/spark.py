@@ -27,14 +27,6 @@ from spextral.core.utils import boolish,\
 
 class Spark(SpextralAnalyzer):
 
-    def getbucket(self):
-        configbucket = self.config("topic", required=False, defaultvalue=None)
-        if configbucket and configbucket not in ["none", "default"]:
-            bucket = configbucket.strip().translate(str.maketrans(string.punctuation, '_' * len(string.punctuation)))
-        else:
-            bucket = 'spextral'
-        return bucket[:255]
-
     def __init__(self, engine):
         self.engine = engine
         super().__init__(self.__class__.__name__)
@@ -50,6 +42,14 @@ class Spark(SpextralAnalyzer):
         self.required_jars = []
         self.spark_logging_level = self.config("logging.level", required=True, defaultvalue="ERROR",
                                                choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING"]).upper()
+
+    def getbucket(self):
+        configbucket = self.config("topic", required=False, defaultvalue=None)
+        if configbucket and configbucket not in ["none", "default"]:
+            bucket = configbucket.strip().translate(str.maketrans(string.punctuation, '_' * len(string.punctuation)))
+        else:
+            bucket = 'spextral'
+        return bucket[:255]
 
     @property
     def schema(self):
@@ -162,16 +162,23 @@ class Spark(SpextralAnalyzer):
             pyspark_submit_args = "--packages"
             for pkg in pyspark_submit_list:
                 pyspark_submit_args = "%s %s" % (pyspark_submit_args, pkg)
+            spextral_log4j_properties = os.path.join(globals.ROOT_DIR, 'config/log4j.properties')
+            pyspark_submit_args = "%s %s %s %s" % (
+                pyspark_submit_args,
+                '--conf "spark.executor.extraJavaOptions=-Dlog4j.configuration=%s"' % spextral_log4j_properties,
+                '--conf "spark.driver.extraJavaOptions=-Dlog4j.configuration=%s"' % spextral_log4j_properties,
+                '--files %s' % spextral_log4j_properties
+            )
             setenviron("PYSPARK_SUBMIT_ARGS", pyspark_submit_args)
             self.info("PYSPARK_SUBMIT_ARGS=%s" % getenviron("PYSPARK_SUBMIT_ARGS"))
-            s_logger = logging.getLogger('py4j.java_gateway')
-            s_logger.setLevel(logging.CRITICAL if self.spark_logging_level == "CRITICAL"
-                              else logging.DEBUG if self.spark_logging_level == "DEBUG"
-                              else logging.ERROR if self.spark_logging_level == "ERROR"
-                              else logging.FATAL if self.spark_logging_level == "FATAL"
-                              else logging.INFO if self.spark_logging_level == "INFO"
-                              else logging.WARN if self.spark_logging_level in ["WARN", "WARNING"]
-                              else logging.ERROR)
+            # s_logger = logging.getLogger('py4j.java_gateway')
+            # s_logger.setLevel(logging.CRITICAL if self.spark_logging_level == "CRITICAL"
+            #                   else logging.DEBUG if self.spark_logging_level == "DEBUG"
+            #                   else logging.ERROR if self.spark_logging_level == "ERROR"
+            #                   else logging.FATAL if self.spark_logging_level == "FATAL"
+            #                   else logging.INFO if self.spark_logging_level == "INFO"
+            #                   else logging.WARN if self.spark_logging_level in ["WARN", "WARNING"]
+            #                   else logging.ERROR)
             setenviron("SPEXTRAL_SPARK_PREPARED", "True")
 
     @timeout_after(60)
@@ -242,9 +249,8 @@ class Spark(SpextralAnalyzer):
     def dump(self):
         self.results = self._stream \
             .selectExpr("CAST(value AS STRING) as spxmsgraw") \
-            .select(from_json("spxmsgraw", self.schema)) \
-            .alias("spxmsg") \
-            .select("spxmsg.*") \
+            .select(from_json("spxmsgraw", self.schema).alias("spxmsg")) \
+            .select("spxmsg.spxtrl.data.spxtrldata") \
             .writeStream \
             .format("console") \
             .option('truncate', 'false') \
@@ -252,4 +258,7 @@ class Spark(SpextralAnalyzer):
             .awaitTermination()
 
     def close(self, **kwargs):
+        pass
+
+    def analyze(self):
         pass
