@@ -52,7 +52,7 @@ def dumpextract(serviceinstance):
     :param serviceinstance:
     :return:
     """
-    return serviceinstance.engine.endpoint.extract()
+    return serviceinstance.engine.endpoint.dump()
 
 
 def dumptransport(serviceinstance):
@@ -93,7 +93,7 @@ class SpextralService(SystemService):
         return not globals.KILLSIG \
             and self.instrumenter.status == "OK" \
             and (
-                   (self.engine.endpoint.connected or self.engine.operation == "dumptransport")
+                   (self.engine.endpoint.connected or self.engine.options.command == "dump")
                    and not (self.engine.endpoint.on_no_results == "exit" and not self.engine.endpoint.results)
                    and not self.engine.endpoint.limit_reached
                ) \
