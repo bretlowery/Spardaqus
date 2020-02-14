@@ -223,11 +223,11 @@ class Splunk(SpextralEndpoint):
                                 else:
                                     datareturned = True
                                     if self.forward:
-                                        if self.grand_total_sent == 0:
-                                            self._energizetransporters(thread_context)
                                         if "dump" in self.engine.worker:
                                             print(json.dumps(r))
                                         else:
+                                            if self.grand_total_sent == 0:
+                                                self._energizetransporters(thread_context)
                                             self.engine.service.que.put(r)
                                     self.grand_total_sent += 1
                                     instrumentation.increment()
@@ -295,6 +295,12 @@ class Splunk(SpextralEndpoint):
             self.engine.service.instrumenter.printall(instrumentation_collection)
             return instrumentation_collection
 
+    def dump(self):
+        """
+        self.engine.worker is checked in the extract::_executequery call to determine that it's a dump we want
+        """
+        return self.extract()
+
     def extract(self):
         """
         Called by the engine's Run function. Reads data from the Splunk endpoint and queues it up locally to send
@@ -326,9 +332,6 @@ class Splunk(SpextralEndpoint):
         """Returns the latest possible date for extractable data in Splunk, in UNIX epoch time format."""
         query_fragment = 'stats latest(_time) as spxtrlval | table spxtrlval'
         return self._executequery(query_fragment, lookup="spxtrlval", lookup_label="timestamp of latest relevant event")
-
-    def getnextsource(self):
-        pass
 
     def close(self, **kwargs):
         pass
