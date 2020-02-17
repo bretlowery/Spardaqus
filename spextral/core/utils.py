@@ -1,4 +1,5 @@
 import datetime
+import logging
 import os
 from pathlib import Path
 import re
@@ -22,7 +23,7 @@ def _getsetyaml(fname,
                 choices=None,
                 intrange=None,
                 quotestrings=False,
-                converttolist=False):
+                converttolist=False) -> str or int or bool or dict or list or None:
     """ Gets or sets Spextral yaml-resident config values. Do not call directly. Overridden by utils.getconfig and in SpextralIntegration and its subclasses."""
 
     def __customizeyaml():
@@ -45,15 +46,15 @@ def _getsetyaml(fname,
             with open(_icf, "w") as _f:
                 yaml.safe_dump(_c, _f, default_flow_style=False)
                 globals.SETTINGS_CACHE = {}
+                globals.CACHED_SETTINGS = {}
         try:
             with open(_icf, "r") as _f:
                 if len(globals.SETTINGS_CACHE) == 0:
                     __customizeyaml()
-                    _c = yaml.safe_load(_f)
-                    globals.SETTINGS_CACHE = _c
-                elif fname not in globals.SETTINGS_CACHE.keys():
+                if _icf not in globals.CACHED_SETTINGS.keys():
                     _c = mergedicts(globals.SETTINGS_CACHE, yaml.safe_load(_f))
                     globals.SETTINGS_CACHE = _c
+                    globals.CACHED_SETTINGS[_icf] = True
         except Exception as e:
             error("Error reading config file '%s': %s" % (_icf, str(e)))
         return globals.SETTINGS_CACHE
@@ -122,7 +123,7 @@ def _getsetyaml(fname,
     return val
 
 
-def boolish(val):
+def boolish(val) -> bool:
     """ Returns True if the passed val is T, True, Y, Yes, or a boolean True.
     Returns False if the passed val is F, False, N, No. Otherwise, returns val. Ignores case."""
     if isinstance(val, str):
@@ -140,7 +141,7 @@ def boolish(val):
         return val
 
 
-def containsdupevalues(structure):
+def containsdupevalues(structure) -> bool or None:
     """Returns True if the passed dict has duplicate items/values, False otherwise. If the passed structure is not a dict, returns None."""
     if isinstance(structure, dict):
         # fast check for dupe keys
@@ -155,12 +156,12 @@ def containsdupevalues(structure):
     return None
 
 
-def debugging():
+def debugging() -> bool:
     """ Returns True if running in a IDE's debugging environment/mode, False otherwise."""
     return sys.gettrace() is not None
 
 
-def getenviron(key, defaultvalue=None):
+def getenviron(key, defaultvalue=None) -> str or int or bool or None:
     k = key.upper()
     try:
         v = os.environ[k]
@@ -169,7 +170,7 @@ def getenviron(key, defaultvalue=None):
     return v
 
 
-def error(msg, onerrorexit=True):
+def error(msg, onerrorexit=True) -> None:
     """ Standard error logging. """
     if msg is None:
         msg = "%s/%s %s: unknown error" % (globals.__NAME__, globals.__VERSION__, datetime.datetime.now().isoformat()[:22])
@@ -187,6 +188,7 @@ def error(msg, onerrorexit=True):
         else:
             printmsg(msg)
         sys.exit(1)
+    return
 
 
 def getconfig(
@@ -201,7 +203,7 @@ def getconfig(
         intrange=None,
         quotestrings=False,
         converttolist=False
-):
+) -> str or int or bool or dict or list or None:
     """ Gets Spextral yaml-resident config values. May be overridden in SpextralIntegration and its subclasses."""
     return _getsetyaml(filename,
                        sectionname,
@@ -217,7 +219,7 @@ def getconfig(
                        converttolist=converttolist)
 
 
-def info(msg):
+def info(msg) -> None:
     """ Standard info logging. """
     if globals.LOGGER and not debugging():
         msg = " %s: %s" % (datetime.datetime.now().isoformat()[:22], msg)
@@ -225,9 +227,10 @@ def info(msg):
     else:
         msg = "%s/%s %s: %s" % (globals.__NAME__, globals.__VERSION__, datetime.datetime.now().isoformat()[:22], msg)
         printmsg(msg)
+    return
 
 
-def isreadable(path):
+def isreadable(path) -> bool:
     """ Returns True if the current user context has permission to read data from the passed path value."""
     if os.path.exists(path):
         try:
@@ -240,11 +243,13 @@ def isreadable(path):
     return False
 
 
-def istruthy(val):
+def istruthy(val) -> bool or str or int or dict or list or None:
     """ Returns True if the passed val is T, True, Y, Yes, 1, or boolean True.
     Returns False if the passed val is boolean False or a string that is not T, True, Y, Yes, or 1, or an integer that is not 1.
     Returns the passed val otherwise. Ignores case."""
-    if isinstance(val, bool):
+    if not val:
+        return val
+    elif isinstance(val, bool):
         return val
     elif isinstance(val, str):
         return {
@@ -262,7 +267,7 @@ def istruthy(val):
         return val
 
 
-def iswritable(path):
+def iswritable(path) -> bool:
     """ Returns True if the current user context has permission to write data to the passed path value."""
     if os.path.exists(path):
         try:
@@ -277,7 +282,7 @@ def iswritable(path):
     return False
 
 
-def mergedicts(a, b, path=None, overwrite=False):
+def mergedicts(a, b, path=None, overwrite=False) -> dict:
     """ Merges dict a and dict b, returning the merged results into dict a.
     e.g. a={'x':1, 'y':2} and b={'z':3, 'q':4} --> a={'x':1, 'y':2, 'z':3, 'q':4}.
     Merge keys example: e.g. a={'x':1, 'y':2} and b={'y':3, 'q':4} --> a={'x':1, 'y':3, 'q':4} [if overwrite=True], OR an exception [if overwrite=False].
@@ -299,17 +304,17 @@ def mergedicts(a, b, path=None, overwrite=False):
     return a
 
 
-def nowstr():
+def nowstr() -> str:
     """Returns the current datetime in YYYYMMDDHHMMSS format as a string."""
     return datetime.datetime.now().strftime("%Y%m%d%H%M%S")
 
 
-def nowint():
+def nowint() -> int:
     """Returns the current datetime in YYYYMMDDHHMMSS format as an integer."""
     return int(nowstr())
 
 
-def numcpus():
+def numcpus() -> int:
     """ Number of available virtual or physical CPUs on this system, i.e.
     user/real as output by time(1) when called with an optimally scaling
     userspace-only program"""
@@ -422,18 +427,19 @@ def numcpus():
     return 1
 
 
-def printmsg(msg):
+def printmsg(msg) -> None:
     """Print text to stdout."""
     print(msg, file=sys.stdout)
     sys.stdout.flush()
+    return
 
 
-def setconfig(filename, sectionname, settingname, newvalue):
+def setconfig(filename, sectionname, settingname, newvalue) -> bool or str or int or dict or list or None:
     """ Sets Spextral yaml-resident config values at runtime. May be overridden in SpextralIntegration and its subclasses."""
     return _getsetyaml(filename, sectionname, settingname, newvalue)
 
 
-def setenviron(key, value):
+def setenviron(key, value) -> str or int or bool or None:
     k = key.upper()
     if value:
         value = None if value.lower().strip() == "none" else value
@@ -448,7 +454,7 @@ def setenviron(key, value):
     return value
 
 
-def sequalsci(val, compareto):
+def sequalsci(val, compareto) -> bool:
     """Takes two strings, lowercases them, and returns True if they are equal, False otherwise."""
     if isinstance(val, str):
         return val.lower() == compareto.lower()
@@ -456,7 +462,7 @@ def sequalsci(val, compareto):
         return False
 
 
-def slower(val):
+def slower(val) -> bool or str or int or dict or list or None:
     """If the passed val is a string, returns its lowercased representation. Returns the passed val unchanged otherwise."""
     if isinstance(val, str):
         return val.lower()
@@ -464,7 +470,7 @@ def slower(val):
         return val
 
 
-def sstrip(val):
+def sstrip(val) -> bool or str or int or dict or list or None:
     """If the passed val is a string, returns its whitespace-stripped representation. Returns the passed val unchanged otherwise."""
     if isinstance(val, str):
         return val.strip()
@@ -472,7 +478,7 @@ def sstrip(val):
         return val
 
 
-def supper(val):
+def supper(val) -> bool or str or int or dict or list or None:
     """If the passed val is a string, returns its uppercased representation. Returns the passed val unchanged otherwise."""
     if isinstance(val, str):
         return val.upper()
@@ -480,7 +486,7 @@ def supper(val):
         return val
 
 
-def tmpfile():
+def tmpfile() -> str:
     """Generates a random file name, creates the file in /tmp, and returns the filespec to the caller."""
     file = '/tmp/%s.spx' % str(uuid.uuid4())
     # wipe(file)
@@ -488,13 +494,14 @@ def tmpfile():
     return file
 
 
-def wipe(file):
+def wipe(file) -> None:
     """Deletes the passed filename."""
     if os.path.isfile(file):
         os.unlink(file)
+    return
 
 
-def xlatearg(argval):
+def xlatearg(argval) -> str:
     """ Normalize multiple argument values to a single canonical value.
     Allows acceptible variants that mean the same thing: e.g., analyze or analysis --> analyze."""
     arg = argval.strip().lower()

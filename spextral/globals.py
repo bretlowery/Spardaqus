@@ -19,6 +19,7 @@ LOGGER = None
 MAX_RSS_MEMORY_USED = 0.0
 LAST_RSS_MEMORY_USED = 0.0
 SETTINGS_CACHE = {}
+CACHED_SETTINGS = {}
 KILLSIG = False
 
 # Adjustable if you know what you are doing
