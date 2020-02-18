@@ -12,36 +12,35 @@ from yaml.resolver import Resolver
 from spextral import globals
 
 
-def _getsetyaml(fname,
-                section,
-                settingname=None,
-                newvalue=None,
-                defaultvalue="",
-                required=False,
-                noneisnone=False,
-                defaultisdefault=False,
-                choices=None,
-                intrange=None,
-                quotestrings=False,
-                converttolist=False) -> str or int or bool or dict or list or None:
+def _getsetyaml(fname: str,
+                section: str,
+                settingname: str or None = None,
+                newvalue: str or int or bool or dict or list or None = None,
+                defaultvalue: str or int or bool or dict or list or None = "",
+                required: bool = False,
+                noneisnone: bool = True,
+                defaultisdefault: bool = True,
+                choices: list or None = None,
+                intrange: list or None = None,
+                quotestrings: bool = False,
+                converttolist: bool = False) -> str or int or bool or dict or list or None:
     """ Gets or sets Spextral yaml-resident config values. Do not call directly. Overridden by utils.getconfig and in SpextralIntegration and its subclasses."""
 
-    def __customizeyaml():
+    def __initialize_yaml_resolver():
         #
-        # Remove On, Off from being loaded as Boolean False from YAML files; instead, load as strings On, OFf
+        # Remove On, Off from being loaded as Boolean False from YAML files; instead, load as strings On, Off
         # This is to allow logging.level to be set to OFF (string) in Spextral's analyze.yaml
-        # See https://stackoverflow.com/questions/36463531/pyyaml-automatically-converting-certain-keys-to-boolean-values
         #
-        for ch in "Oo":
-            if len(Resolver.yaml_implicit_resolvers[ch]) == 1:
-                del Resolver.yaml_implicit_resolvers[ch]
-            else:
-                Resolver.yaml_implicit_resolvers[ch] = [x for x in Resolver.yaml_implicit_resolvers[ch] if 'bool' not in x[0]]
-        #
-        #
+        boolkey = "tag:yaml.org,2002:bool"
+        for i in "Oo":
+            for j in Resolver.yaml_implicit_resolvers[i]:
+                if j[0] == boolkey:
+                    Resolver.yaml_implicit_resolvers[i].remove(j)
+                    Resolver.yaml_implicit_resolvers[i].append((boolkey, re.compile('^(?:yes|Yes|YES|no|No|NO|true|True|TRUE|false|False|FALSE)$', re.VERBOSE)))
+                    break
         return
 
-    def __load(_icf, _c=None):
+    def __load(_icf: str, _c: str or None = None):
         if _c is not None:
             with open(_icf, "w") as _f:
                 yaml.safe_dump(_c, _f, default_flow_style=False)
@@ -50,7 +49,7 @@ def _getsetyaml(fname,
         try:
             with open(_icf, "r") as _f:
                 if len(globals.SETTINGS_CACHE) == 0:
-                    __customizeyaml()
+                    __initialize_yaml_resolver()
                 if _icf not in globals.CACHED_SETTINGS.keys():
                     _c = mergedicts(globals.SETTINGS_CACHE, yaml.safe_load(_f))
                     globals.SETTINGS_CACHE = _c
@@ -161,7 +160,7 @@ def debugging() -> bool:
     return sys.gettrace() is not None
 
 
-def getenviron(key, defaultvalue=None) -> str or int or bool or None:
+def getenviron(key: str, defaultvalue: str or int or bool or None = None) -> str or int or bool or None:
     k = key.upper()
     try:
         v = os.environ[k]
@@ -170,7 +169,7 @@ def getenviron(key, defaultvalue=None) -> str or int or bool or None:
     return v
 
 
-def error(msg, onerrorexit=True) -> None:
+def error(msg: str, onerrorexit: bool = True) -> None:
     """ Standard error logging. """
     if msg is None:
         msg = "%s/%s %s: unknown error" % (globals.__NAME__, globals.__VERSION__, datetime.datetime.now().isoformat()[:22])
@@ -192,18 +191,19 @@ def error(msg, onerrorexit=True) -> None:
 
 
 def getconfig(
-        filename,
-        sectionname,
-        settingname=None,
-        defaultvalue="",
-        required=False,
-        noneisnone=True,
-        defaultisdefault=True,
-        choices=None,
-        intrange=None,
-        quotestrings=False,
-        converttolist=False
-) -> str or int or bool or dict or list or None:
+        filename: str,
+        sectionname: str,
+        section: str,
+        settingname: str or None = None,
+        newvalue: str or int or bool or dict or list or None = None,
+        defaultvalue: str or int or bool or dict or list or None = "",
+        required: bool = False,
+        noneisnone: bool = True,
+        defaultisdefault: bool = True,
+        choices: list or None = None,
+        intrange: list or None = None,
+        quotestrings: bool = False,
+        converttolist: bool = False) -> str or int or bool or dict or list or None:
     """ Gets Spextral yaml-resident config values. May be overridden in SpextralIntegration and its subclasses."""
     return _getsetyaml(filename,
                        sectionname,
@@ -219,7 +219,7 @@ def getconfig(
                        converttolist=converttolist)
 
 
-def info(msg) -> None:
+def info(msg: str) -> None:
     """ Standard info logging. """
     if globals.LOGGER and not debugging():
         msg = " %s: %s" % (datetime.datetime.now().isoformat()[:22], msg)
@@ -230,7 +230,7 @@ def info(msg) -> None:
     return
 
 
-def isreadable(path) -> bool:
+def isreadable(path: str) -> bool:
     """ Returns True if the current user context has permission to read data from the passed path value."""
     if os.path.exists(path):
         try:
@@ -267,7 +267,7 @@ def istruthy(val) -> bool or str or int or dict or list or None:
         return val
 
 
-def iswritable(path) -> bool:
+def iswritable(path: str) -> bool:
     """ Returns True if the current user context has permission to write data to the passed path value."""
     if os.path.exists(path):
         try:
@@ -282,8 +282,8 @@ def iswritable(path) -> bool:
     return False
 
 
-def mergedicts(a, b, path=None, overwrite=False) -> dict:
-    """ Merges dict a and dict b, returning the merged results into dict a.
+def mergedicts(a: dict, b: dict, path: list or None = None, overwrite: bool = False) -> dict:
+    """ Extended merge dict a and dict b, returning the merged results into dict a.
     e.g. a={'x':1, 'y':2} and b={'z':3, 'q':4} --> a={'x':1, 'y':2, 'z':3, 'q':4}.
     Merge keys example: e.g. a={'x':1, 'y':2} and b={'y':3, 'q':4} --> a={'x':1, 'y':3, 'q':4} [if overwrite=True], OR an exception [if overwrite=False].
     """
@@ -427,19 +427,22 @@ def numcpus() -> int:
     return 1
 
 
-def printmsg(msg) -> None:
+def printmsg(msg: str) -> None:
     """Print text to stdout."""
     print(msg, file=sys.stdout)
     sys.stdout.flush()
     return
 
 
-def setconfig(filename, sectionname, settingname, newvalue) -> bool or str or int or dict or list or None:
+def setconfig(filename: str,
+              sectionname: str,
+              settingname: str,
+              newvalue: str or int or bool or dict or list or None) -> bool or str or int or dict or list or None:
     """ Sets Spextral yaml-resident config values at runtime. May be overridden in SpextralIntegration and its subclasses."""
     return _getsetyaml(filename, sectionname, settingname, newvalue)
 
 
-def setenviron(key, value) -> str or int or bool or None:
+def setenviron(key: str, value: str or int or bool or None) -> str or int or bool or None:
     k = key.upper()
     if value:
         value = None if value.lower().strip() == "none" else value
@@ -456,7 +459,7 @@ def setenviron(key, value) -> str or int or bool or None:
 
 def sequalsci(val, compareto) -> bool:
     """Takes two strings, lowercases them, and returns True if they are equal, False otherwise."""
-    if isinstance(val, str):
+    if isinstance(val, str) and isinstance(compareto, str):
         return val.lower() == compareto.lower()
     else:
         return False
@@ -494,14 +497,14 @@ def tmpfile() -> str:
     return file
 
 
-def wipe(file) -> None:
+def wipe(file: str) -> None:
     """Deletes the passed filename."""
     if os.path.isfile(file):
         os.unlink(file)
     return
 
 
-def xlatearg(argval) -> str:
+def xlatearg(argval: str) -> str:
     """ Normalize multiple argument values to a single canonical value.
     Allows acceptible variants that mean the same thing: e.g., analyze or analysis --> analyze."""
     arg = argval.strip().lower()
