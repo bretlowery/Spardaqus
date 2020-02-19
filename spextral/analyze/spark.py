@@ -19,6 +19,7 @@ from spextral.core.exceptions import SpextralTimeoutWarning
 from spextral.core.metaclasses import SpextralAnalyzer
 from spextral.core.utils import boolish,\
     error,\
+    info, \
     getconfig,\
     getenviron,\
     isreadable,\
@@ -129,7 +130,7 @@ class Spark(SpextralAnalyzer):
                     elif "spark.executor.extraclasspath" in row and xc in row:
                         f2 = True
         if not f1 or not f2:
-            self.error("%s is not correctly configured for Kafka streaming on Spextral. Please download this file to your Spextral analyze server:\r\n"
+            error("%s is not correctly configured for Kafka streaming on Spextral. Please download this file to your Spextral analyze server:\r\n"
                        "   %s    (to /your/server/path, for example)\r\n"
                        "then add these lines to %s:\r\n"
                        "   spark.driver.extraClassPath   %s\r\n"
@@ -149,10 +150,10 @@ class Spark(SpextralAnalyzer):
             setenviron("PYSPARK_PYTHON", self.config("pyspark.python", required=False, defaultvalue=getenviron("PYSPARK_PYTHON")))
             setenviron("PYSPARK_DRIVER_PYTHON", self.config("pyspark.driver.python", required=False, defaultvalue=getenviron("PYSPARK_DRIVER_PYTHON")))
             setenviron("SPARK_LOCAL_IP", self.config("pyspark.local.ip", required=False, defaultvalue=getenviron("SPARK_LOCAL_IP")))
-            self.info("SPARK_HOME=%s" % getenviron("SPARK_HOME"))
-            self.info("SPARK_LOCAL_IP=%s" % getenviron("SPARK_LOCAL_IP"))
-            self.info("PYSPARK_PYTHON=%s" % getenviron("PYSPARK_PYTHON"))
-            self.info("PYSPARK_DRIVER_PYTHON=%s" % getenviron("PYSPARK_DRIVER_PYTHON"))
+            info("SPARK_HOME=%s" % getenviron("SPARK_HOME"))
+            info("SPARK_LOCAL_IP=%s" % getenviron("SPARK_LOCAL_IP"))
+            info("PYSPARK_PYTHON=%s" % getenviron("PYSPARK_PYTHON"))
+            info("PYSPARK_DRIVER_PYTHON=%s" % getenviron("PYSPARK_DRIVER_PYTHON"))
             self._check4requiredextraclasses(spark_home)
             os_pyspark_submit_list = getenviron("PYSPARK_SUBMIT_ARGS", "").replace("--packages", "").strip().split(" ")
             pyspark_submit_list = globals.PYSPARK_REQUIRED_PACKAGES.strip().split(" ")
@@ -170,7 +171,7 @@ class Spark(SpextralAnalyzer):
                 '--files %s' % spextral_log4j_properties
             )
             setenviron("PYSPARK_SUBMIT_ARGS", pyspark_submit_args)
-            self.info("PYSPARK_SUBMIT_ARGS=%s" % getenviron("PYSPARK_SUBMIT_ARGS"))
+            info("PYSPARK_SUBMIT_ARGS=%s" % getenviron("PYSPARK_SUBMIT_ARGS"))
             s_logger = logging.getLogger('py4j')
             s_logger.setLevel(logging.CRITICAL if self.spark_logging_level == "CRITICAL"
                               else logging.DEBUG if self.spark_logging_level == "DEBUG"
@@ -207,7 +208,7 @@ class Spark(SpextralAnalyzer):
             pass
 
     def connect(self, **kwargs):
-        self.info("Connecting to %s analyze cluster at %s" % (self.integration.capitalize(), self.target))
+        info("Connecting to %s analyze cluster at %s" % (self.integration.capitalize(), self.target))
         self._prepare()
         try:
             self.session = SparkSession \
@@ -218,7 +219,7 @@ class Spark(SpextralAnalyzer):
             self.results = '__QUERY_PENDING__'
         except Exception as e:
             error("establishing %s session at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
-        self.info("Connected to %s %s" % (self.integration.capitalize(), self.sc.version))
+        info("Connected to %s %s" % (self.integration.capitalize(), self.sc.version))
 
     @property
     def connected(self):
@@ -243,7 +244,7 @@ class Spark(SpextralAnalyzer):
                     s.option("kafka.%s" % k, v)
                 stream = s.load()
         except Exception as e:
-            self.error("reading from %s transport stream at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+            error("reading from %s transport stream at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
         return stream
 
     def dump(self):
@@ -261,13 +262,5 @@ class Spark(SpextralAnalyzer):
         pass
 
     def analyze(self):
-        self.results = self._stream \
-            .selectExpr("CAST(value AS STRING) as spxmsgraw") \
-            .select(from_json("spxmsgraw", self.schema).alias("spxmsg")) \
-            .select("spxmsg.spxtrl.data.spxtrldata") \
-            .writeStream \
-            .format("console") \
-            .option('truncate', 'false') \
-            .start() \
-            .awaitTermination()
+       pass
 

@@ -2,7 +2,7 @@ import datetime
 from dateutil import parser as dtparser
 
 from spextral.core.utils import \
-    error, info
+    error, info, exception
 
 
 class Window:
@@ -52,7 +52,7 @@ class Window:
             self.epochstart = s
             info("Next batch start date advanced to %s (%s)" % (s, self.start))
         except Exception as e:
-            error("Trying to advance window start date: %s" % str(e))
+            exception("Trying to advance window start date: %s" % str(e))
         return
 
     def _deletekeys(self):

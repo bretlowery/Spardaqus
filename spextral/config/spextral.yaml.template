@@ -1,9 +1,13 @@
 spextral:
   config:
     enabled: true
-    haltonerror: true
-    logerrors: true
-    loginfo: true
+    log.enabled: true
+    log.console: true
+    log.file: "/var/log/spextral/spextral.log"
+    log.rotation: "1 hour"
+    log.compression: zip
+    log.level: info
+    log.format: "{time} {level} {message}"
     encoding: utf-8
     keysize: 32  # 8 - 128 characters
   redis:

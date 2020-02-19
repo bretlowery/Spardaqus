@@ -1,5 +1,5 @@
 import datetime
-import logging
+import inspect
 import os
 from pathlib import Path
 import re
@@ -8,6 +8,8 @@ import sys
 import uuid
 import yaml
 from yaml.resolver import Resolver
+
+from loguru import logger
 
 from spextral import globals
 
@@ -171,21 +173,20 @@ def getenviron(key: str, defaultvalue: str or int or bool or None = None) -> str
 
 def error(msg: str, onerrorexit: bool = True) -> None:
     """ Standard error logging. """
-    if msg is None:
-        msg = "%s/%s %s: unknown error" % (globals.__NAME__, globals.__VERSION__, datetime.datetime.now().isoformat()[:22])
-    else:
-        msg = "%s/%s %s: %s" % (globals.__NAME__, globals.__VERSION__, datetime.datetime.now().isoformat()[:22], msg)
-    if globals.LOGGER and not debugging():
-        globals.LOGGER.error(msg)
-    else:
-        printmsg(msg)
+    logger.error(msg)
     if onerrorexit:
         globals.KILLSIG = True
-        msg = "%s/%s %s: Exiting due to error" % (globals.__NAME__, globals.__VERSION__, datetime.datetime.now().isoformat()[:22])
-        if globals.LOGGER and not debugging():
-            globals.LOGGER.error(msg)
-        else:
-            printmsg(msg)
+        logger.error("Exiting due to error")
+        sys.exit(1)
+    return
+
+
+def exception(msg: str, onerrorexit: bool = True) -> None:
+    """ Standard exception logging. """
+    logger.exception(msg)
+    if onerrorexit:
+        globals.KILLSIG = True
+        logger.info("Exiting due to error")
         sys.exit(1)
     return
 
@@ -193,9 +194,7 @@ def error(msg: str, onerrorexit: bool = True) -> None:
 def getconfig(
         filename: str,
         sectionname: str,
-        section: str,
         settingname: str or None = None,
-        newvalue: str or int or bool or dict or list or None = None,
         defaultvalue: str or int or bool or dict or list or None = "",
         required: bool = False,
         noneisnone: bool = True,
@@ -221,13 +220,7 @@ def getconfig(
 
 def info(msg: str) -> None:
     """ Standard info logging. """
-    if globals.LOGGER and not debugging():
-        msg = " %s: %s" % (datetime.datetime.now().isoformat()[:22], msg)
-        globals.LOGGER.info(msg)
-    else:
-        msg = "%s/%s %s: %s" % (globals.__NAME__, globals.__VERSION__, datetime.datetime.now().isoformat()[:22], msg)
-        printmsg(msg)
-    return
+    return logger.info(msg)
 
 
 def isreadable(path: str) -> bool:

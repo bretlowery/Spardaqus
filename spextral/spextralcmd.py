@@ -4,6 +4,8 @@ import os
 import sys
 from time import sleep
 
+from loguru import logger
+
 from spextral import globals
 from spextral.spextralservice import SpextralService
 from spextral.core.metaclasses import SpextralNullEndpoint
@@ -11,10 +13,10 @@ import spextral.core.profiling as profile
 from spextral.core.utils import \
     debugging, \
     getconfig, \
-    error, \
     info, \
+    error, \
+    istruthy, \
     printmsg, \
-    wipe, \
     xlatearg
 
 
@@ -24,8 +26,23 @@ class SpextralEngine:
     based on the passed commandline startup values. Handles start, stop logic.
     """
 
-    def config(self, setting, required=True, defaultvalue=0, choices=None, intrange=None, quotestrings=False):
-        return getconfig(self.options.operation, self.options.operation, setting, required=required, defaultvalue=defaultvalue, choices=choices, intrange=intrange, quotestrings=quotestrings)
+    def config(self,
+               settingname,
+               required=True,
+               defaultvalue=0,
+               choices=None,
+               intrange=None,
+               quotestrings=False,
+               noneisnone=True):
+        return getconfig(self.options.operation,
+                         self.options.operation,
+                         settingname=settingname,
+                         required=required,
+                         defaultvalue=defaultvalue,
+                         choices=choices,
+                         intrange=intrange,
+                         quotestrings=quotestrings,
+                         noneisnone=noneisnone)
 
     def __init__(self):
         argz = argparse.ArgumentParser(usage="spextralcmd "
@@ -59,11 +76,27 @@ class SpextralEngine:
                           dest="profile",
                           default=False
                           )
+        argz.add_argument("--logfile",
+                          action="store",
+                          dest="logfile",
+                          default=""
+                          )
+        argz.add_argument("--quiet",
+                          action="store_true",
+                          dest="quiet",
+                          default=False
+                          )
+        argz.add_argument("--debug",
+                          action="store_true",
+                          dest="debug",
+                          default=False
+                          )
         self.options = argz.parse_args()
         try:
             self.options.command = xlatearg(self.options.command)
             self.options.operation = xlatearg(self.options.operation)
             self.options.option = xlatearg(self.options.option)
+            self.options.logfile = self.options.logfile.strip()
         except IndexError:
             self.options.command = None
             self.name = None
@@ -74,6 +107,7 @@ class SpextralEngine:
         self.service = None
         self.worker = None
         self.scrub_inputs()
+        self.init_logging()
         info("Halting Spextral") if self.options.command == "stop" else info("Initializing Spextral")
         if self.options.profile:
             profile.memory()
@@ -81,6 +115,33 @@ class SpextralEngine:
             info("Debugging mode detected")
         self.create_service_topology()
         self.create_service_instance()
+        return
+
+    def init_logging(self):
+        logger.remove()
+        log_enabled = getconfig("spextral", "config", "log.enabled", required=True)
+        if log_enabled and not self.options.quiet:
+            log_level = getconfig("spextral", "config", "log.level",
+                                  required=True, defaultvalue="error", choices=["info", "error"]).upper()
+            log_format = getconfig("spextral", "config", "log.format",
+                                   required=False, defaultvalue="{time} {level} {message}")
+            log_console = getconfig("spextral", "config", "log.console", required=True)
+            if log_console:
+                logger.add(sys.stderr, format=log_format, level="ERROR")
+                if log_level == "INFO":
+                    logger.add(sys.stdout, format=log_format, level="INFO")
+            log_file = getconfig("spextral", "config", "log.file", required=False, defaultvalue=self.options.logfile)
+            if not log_file:
+                if not log_console:
+                    error("Logging is enabled in the config, but neither console logging nor a log file are specified.")
+            else:
+                rotation = getconfig("spextral", "config", "log.rotation", required=False, defaultvalue=None)
+                compression = getconfig("spextral", "config", "log.compression", required=False, defaultvalue=None)
+                logger.add(log_file,
+                           format=log_format,
+                           level=log_level,
+                           rotation=rotation,
+                           compression = compression)
         return
 
     def scrub_inputs(self):

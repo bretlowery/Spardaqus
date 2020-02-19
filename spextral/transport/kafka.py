@@ -13,7 +13,7 @@ from spextral import globals
 from spextral.core.decorators import timeout_after
 from spextral.core.exceptions import SpextralTimeoutWarning
 from spextral.core.metaclasses import SpextralTransport
-from spextral.core.utils import istruthy, mergedicts, getenviron
+from spextral.core.utils import istruthy, mergedicts, getenviron, info, error, exception
 
 
 class Kafka(SpextralTransport):
@@ -91,13 +91,13 @@ class Kafka(SpextralTransport):
     def connect(self):
         """Connect to the Kafka instance specified in the extract.yaml's (when extracting) or analyze.yaml's (when analyzing) Kafka connection settings."""
         if self.engine.worker == "extract":
-            self.info("Connecting to %s transport server at %s as a publisher" % (self.integration.capitalize(), self.target))
+            info("Connecting to %s transport server at %s as a publisher" % (self.integration.capitalize(), self.target))
             self.transporter = Producer(**self.transporter_options)
         else:
-            self.info("Connecting to %s transport server at %s as a subscriber" % (self.integration.capitalize(), self.target))
+            info("Connecting to %s transport server at %s as a subscriber" % (self.integration.capitalize(), self.target))
             self.transporter = Consumer(**self.transporter_options)
         if self.connected:
-            self.info("Connected to %s %s" % (self.integration.capitalize(), self.version))
+            info("Connected to %s %s" % (self.integration.capitalize(), self.version))
         return
 
     @timeout_after(20)
@@ -144,7 +144,7 @@ class Kafka(SpextralTransport):
         n = argstuple[1]
         thread_name = "%s transport thread %d" % (self.integration.capitalize(), n)
         self.engine.service.instrumenter.register(groupname=self.integration)
-        self.info("Starting %s" % thread_name)
+        info("Starting %s" % thread_name)
         instrumentation = self.engine.service.instrumenter.get(thread_name)
         wait_ticks = 0
         queue_data = None
@@ -181,17 +181,17 @@ class Kafka(SpextralTransport):
                     instrumentation.increment()
                     if instrumentation.counter % 1000 == 0:
                         if self.engine.endpoint.queue_complete:
-                            self.info("Queueing complete; sent %d via %s" % (instrumentation.counter, thread_name))
+                            info("Queueing complete; sent %d via %s" % (instrumentation.counter, thread_name))
                         self.transporter.flush()
                 except KafkaException as kx:
                     self._threadend()
-                    self.error("KafkaException transporting via %s: %s" % (thread_name, str(kx)))
+                    exception("KafkaException transporting via %s: %s" % (thread_name, str(kx)))
                 except KafkaError as ke:
                     self._threadend()
-                    self.error("KafkaError transporting via %s: %s" % (thread_name, str(ke)))
+                    error("KafkaError transporting via %s: %s" % (thread_name, str(ke)))
                 except Exception as e:
                     self._threadend()
-                    self.error("exception transporting via %s: %s" % (thread_name, str(e)))
+                    exception("exception transporting via %s: %s" % (thread_name, str(e)))
                     raise e
                 queue_data = None
         self._threadend()
@@ -201,27 +201,30 @@ class Kafka(SpextralTransport):
     def _poll(self):
         return self.transporter.poll()
 
-    def dump(self):
-        """Unloads all Spextral messages from Kafka and prints them out to the console instead of sending them to Spark."""
+    def receive(self, argstuple=None):
+        """Unloads all Spextral messages from Kafka and sends them to the analyze endpoint."""
+        que = argstuple[0]
         self.transporter.subscribe([self.bucket])
-        msg = None
         try:
             while True:
-                msg = None
                 msg = self._poll()
-                if not msg:
-                    break
-                print(msg.value().decode(self.engine.encoding))
+                if msg:
+                    val = msg.value().decode(self.engine.encoding)
+                    que.put() if que else print(msg.value().decode(self.engine.encoding))
         except SpextralTimeoutWarning:
             pass
         except KafkaException as kx:
-            self.error("KafkaException: %s" % str(kx))
+            exception("KafkaException: %s" % str(kx))
         except KafkaError as ke:
-            self.error("KafkaError: %s" % str(ke))
+            error("KafkaError: %s" % str(ke))
         except Exception as e:
-            self.error("Exception: %s" % str(e))
+            exception("Exception: %s" % str(e))
         finally:
             globals.KILLSIG = True
+
+    def dump(self):
+        """Unloads all Spextral messages from Kafka and prints them out to the console instead of sending them to analyze endpoint."""
+        return self.receive()
 
     @property
     def closed(self):

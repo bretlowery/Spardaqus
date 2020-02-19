@@ -30,18 +30,6 @@ class SpextralIntegration:
         pass
 
     @abstractattribute
-    def loginfo(self):
-        pass
-
-    @abstractattribute
-    def logerrors(self):
-        pass
-
-    @abstractattribute
-    def haltonerror(self):
-        pass
-
-    @abstractattribute
     def timeout(self):
         pass
 
@@ -56,19 +44,6 @@ class SpextralIntegration:
         else:
             return utils.getconfig(self.engine.options.operation, self.integration, setting, required=required, defaultvalue=defaultvalue,
                                    choices=choices, intrange=intrange, quotestrings=quotestrings, converttolist=converttolist)
-
-    def error(self, err):
-        if self.logerrors:
-            utils.error('%s %s operation failed: %s' % (self.integration.capitalize(), self.engine.options.operation, err))
-        if self.haltonerror:
-            globals.KILLSIG = True
-            sys.exit(1)
-        return
-
-    def info(self, msg):
-        if self.loginfo:
-            utils.info(msg)
-        return
 
 
 class SpextralEndpoint(SpextralIntegration):

@@ -110,15 +110,14 @@ class SpextralService(SystemService):
             from argparse import Namespace
             options = Namespace(
                     abort=False,
+                    debug=False,
                     enabled=True,
-                    haltonerror=True,
                     init=False,
                     limit=0,
-                    logerrors=True,
-                    loginfo=False,
+                    logfile="",
+                    loglevel="INFO",
                     profile=False,
-                    test=False,
-                    quiet=True
+                    quiet=False
             )
             # update default service settings with the entries in the spextral.yaml
             settings = getconfig("spextral", "config")
