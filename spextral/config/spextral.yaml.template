@@ -8,6 +8,7 @@ spextral:
     log.compression: zip
     log.level: info
     log.format: "{time} {level} {message}"
+    log.time.format: "YY/MM/DD HH:mm:ss"
     encoding: utf-8
     keysize: 32  # 8 - 128 characters
   redis:

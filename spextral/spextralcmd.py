@@ -121,10 +121,11 @@ class SpextralEngine:
         logger.remove()
         log_enabled = getconfig("spextral", "config", "log.enabled", required=True)
         if log_enabled and not self.options.quiet:
-            log_level = getconfig("spextral", "config", "log.level",
-                                  required=True, defaultvalue="error", choices=["info", "error"]).upper()
-            log_format = getconfig("spextral", "config", "log.format",
-                                   required=False, defaultvalue="{time} {level} {message}")
+            log_level = getconfig("spextral", "config", "log.level", required=True, defaultvalue="error", choices=["info", "error"]).upper()
+            log_format = getconfig("spextral", "config", "log.format", required=False, defaultvalue="{time} {level} {message}").lower()
+            log_time_format = getconfig("spextral", "config", "log.time.format", required=False, defaultvalue=None, noneisnone=True)
+            if log_time_format:
+                log_format = log_format.replace("{time}", "{time:%s}" % log_time_format)
             log_console = getconfig("spextral", "config", "log.console", required=True)
             if log_console:
                 logger.add(sys.stderr, format=log_format, level="ERROR")
@@ -133,6 +134,7 @@ class SpextralEngine:
             log_file = getconfig("spextral", "config", "log.file", required=False, defaultvalue=self.options.logfile)
             if not log_file:
                 if not log_console:
+                    logger.add(sys.stderr, format=log_format, level="ERROR")
                     error("Logging is enabled in the config, but neither console logging nor a log file are specified.")
             else:
                 rotation = getconfig("spextral", "config", "log.rotation", required=False, defaultvalue=None)
@@ -250,7 +252,7 @@ def main():
             else:
                 printmsg("%s is not running." % engine.service.name)
         else:
-            error("Invalid command")
+            error("Invalid command '%s'" % engine.options.command)
     except SystemError:
         halt(engine, 1)
     finally:
