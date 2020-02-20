@@ -1,4 +1,5 @@
 import socket
+# import pandas as pd
 from pyspark.sql.types import StringType, StructType, ArrayType
 from spextral import globals
 
@@ -78,3 +79,5 @@ class SpextralMessage:
                         "data": []
                     }
                 }
+
+

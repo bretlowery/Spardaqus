@@ -2,7 +2,7 @@ from collections import deque
 import threading
 import time
 
-from spextral.core.utils import containsdupevalues, info, nowint, nowstr
+from spextral.core.utils import containsdupevalues, exception, info, nowint, nowstr
 
 
 class Instrumentation:
@@ -162,7 +162,12 @@ class InstrumentationManager:
     def get(self, tag="main"):
         """Returns the Instrumentation object for the current thread."""
         tid = threading.current_thread().ident
-        return self.new(self.instance.instruments[self.instance.players[tid]], tag)
+        try:
+            return self.new(self.instance.instruments[self.instance.players[tid]], tag)
+        except KeyError:
+            exception("SpextralInstrumentation instrument or player not found; was the integration registered?")
+        except Exception as e:
+            raise e
 
     def collect(self, groupname):
         """Finalizes the stats for all of the Instrumentation objects in the named thread group or 'pool'."""

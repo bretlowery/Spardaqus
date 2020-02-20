@@ -13,6 +13,7 @@ import spextral.core.profiling as profile
 from spextral.core.utils import \
     debugging, \
     error, \
+    exception,\
     getconfig, \
     info, \
     mergedicts
@@ -92,11 +93,16 @@ class SpextralService(SystemService):
 
     @property
     def runnable(self):
+        try:
+            endpoint_has_results = self.engine.endpoint.results.empty
+        except AttributeError:
+            endpoint_has_results = self.engine.endpoint.results
+            pass
         return not globals.KILLSIG \
             and self.instrumenter.status == "OK" \
             and (
                    (self.engine.endpoint.connected or self.engine.options.command == "dump")
-                   and not (self.engine.endpoint.on_no_results == "exit" and not self.engine.endpoint.results)
+                   and not (self.engine.endpoint.on_no_results == "exit" and not endpoint_has_results)
                    and not self.engine.endpoint.limit_reached
                ) \
             and not self.engine.options.command == 'stop'
@@ -164,7 +170,7 @@ class SpextralService(SystemService):
             #
             #
         except Exception as e:
-            error("Error in %s: %s" % (self.name, str(e)))
+            exception("Exception in %s: %s" % (self.name, str(e)))
         finally:
             self.que.task_done()
             self.stop()

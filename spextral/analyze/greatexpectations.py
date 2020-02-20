@@ -1,12 +1,13 @@
 import concurrent.futures as futures
 from contextlib import nullcontext
 from functools import lru_cache
-import logging
+import json
 import os
 from queue import Queue
 from queue import Empty as QueueEmpty
 import string
 import sys
+from tabulate import tabulate
 from time import sleep
 
 
@@ -71,6 +72,9 @@ class Greatexpectations(SpextralAnalyzer):
         for n in range(1, self.thread_count + 1):
             thread_context.submit(self.engine.transport.receive, (self.engine.service.que, n,))
         self.results = pd.DataFrame()
+        self.engine.service.instrumenter.register(groupname=self.integration)
+        self.limit_reached = False
+        self.results = pd.DataFrame()
 
     @property
     def connected(self):
@@ -85,32 +89,44 @@ class Greatexpectations(SpextralAnalyzer):
             while not exit_thread:
                 while not rawmsg:
                     try:
-                        rawmsg = self.engine.service.que.get_nowait()
-                    except QueueEmpty:
-                        if globals.KILLSIG or \
-                                (instrumentation.counter >= 1 and (
-                                        0 < self.engine.options.limit <= instrumentation.counter
-                                        or self.engine.options.command == 'stop'
-                                )
-                                ):
-                            exit_thread = True
-                            break
-                        rawmsg = None
-                        sleep(1)
-                        wait_ticks += 1
-                        if 0 < self.maxwait < wait_ticks:
-                            raise SpextralWaitExpired
-                        pass
+                        try:
+                            rawmsg = self.engine.service.que.get_nowait()
+                        except QueueEmpty:
+                            if globals.KILLSIG or \
+                                    (instrumentation.counter >= 1 and (
+                                            0 < self.engine.options.limit <= instrumentation.counter
+                                            or self.engine.options.command == 'stop'
+                                    )
+                                    ):
+                                exit_thread = True
+                                break
+                            rawmsg = None
+                            sleep(1)
+                            wait_ticks += 1
+                            if 0 < self.maxwait < wait_ticks:
+                                raise SpextralWaitExpired
+                            pass
                     except SpextralWaitExpired:
                         info("Max %ds wait time for new messages exceeded; exiting" % self.maxwait)
                         exit_thread = True
-                        pass
+                        break
+                    except Exception as e:
+                        exception("Exception during analysis: %s" % str(e))
                 if exit_thread or globals.KILLSIG:
                     break
-                self.results.append(json_normalize(rawmsg))
+                msg = json.loads(rawmsg).get("spxtrl").get("data")[0]
+                pdf = json_normalize(msg)
+                self.results = pdf if self.results.empty else self.results.append(pdf, ignore_index=True)
+                instrumentation.increment()
+                rawmsg = None
+                if self.engine.options.limit > 0:
+                    if self.engine.options.limit == instrumentation.counter:
+                        self.limit_reached = True
+                        info("--limit value (%d) reached" % self.engine.options.limit)
+                        break
             if instrumentation.counter > 0:
                 with pd.option_context('display.max_rows', instrumentation.counter, 'display.max_columns', None):
-                    print(self.results)
+                    print(tabulate(self.results, headers='keys', tablefmt='psql'))
 
     def analyze(self, **kwargs):
         return

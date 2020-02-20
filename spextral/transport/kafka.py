@@ -2,7 +2,6 @@ import os
 import datetime
 import json
 from queue import Empty as QueueEmpty
-import socket
 import string
 import subprocess
 from time import sleep
@@ -14,7 +13,6 @@ from spextral.core.decorators import timeout_after
 from spextral.core.exceptions import SpextralTimeout, SpextralWaitExpired
 from spextral.core.metaclasses import SpextralTransport
 from spextral.core.utils import istruthy, mergedicts, getenviron, info, error, exception
-
 
 class Kafka(SpextralTransport):
 
