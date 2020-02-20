@@ -55,7 +55,6 @@ class Kafka(SpextralTransport):
                         transporter_kwargs[k] = transporter_options[k]
             self.transporter_options = transporter_kwargs
         self.bucket = self.getbucket()
-        self.envelope = self.engine.service.message_schema.json
         self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration_capitalized, self.target)
         self.maxwait = self.config("maxwait", required=False, defaultvalue=0)
 
@@ -121,8 +120,8 @@ class Kafka(SpextralTransport):
             if err is not None:
                 raise KafkaException(err)
 
-        def _packit(data, encoding):
-            packit = self.envelope
+        def _packit(data, envelope):
+            packit = envelope
             packit["spxtrl"]["data"] = [dict(data)]   # convert OrderedDict to dict, then listify
             packit["spxtrl"]["meta"]["sent"] = datetime.datetime.now().isoformat()
             return json.dumps(packit)
@@ -133,6 +132,7 @@ class Kafka(SpextralTransport):
         self.engine.service.instrumenter.register(groupname=self.integration)
         info("Starting %s" % thread_name)
         instrumentation = self.engine.service.instrumenter.get(thread_name)
+        envelope = self.engine.service.message_schema.json
         wait_ticks = 0
         rawmsg = None
         exit_thread = False
@@ -166,7 +166,7 @@ class Kafka(SpextralTransport):
                 wait_ticks = 0
                 try:
                     # send data
-                    encoded_packet = _packit(rawmsg, self.engine.encoding)
+                    encoded_packet = _packit(rawmsg, envelope)
                     self.transporter.produce(self.bucket, encoded_packet, on_delivery=__kafkacallback)
                     self.transporter.poll(0)
                     instrumentation.increment()
