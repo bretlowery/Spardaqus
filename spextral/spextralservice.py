@@ -17,6 +17,7 @@ from spextral.core.utils import \
     info, \
     mergedicts
 from spextral.core.state import Redis as StateManager
+from spextral.core.schemas import SpextralMessage
 
 
 def analyze(serviceinstance):
@@ -81,6 +82,7 @@ class SpextralService(SystemService):
         self.que = Queue()
         self.state = StateManager()
         self.instrumenter = InstrumentationManager(engine=self.engine)
+        self.message_schema = SpextralMessage()
 
     def is_running(self):
         if debugging:

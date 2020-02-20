@@ -15,7 +15,7 @@ from pyspark.sql.functions import *
 
 from spextral import globals
 from spextral.core.decorators import timeout_after
-from spextral.core.exceptions import SpextralTimeoutWarning
+from spextral.core.exceptions import SpextralTimeout
 from spextral.core.metaclasses import SpextralAnalyzer
 from spextral.core.utils import boolish,\
     error,\
@@ -39,7 +39,7 @@ class Spark(SpextralAnalyzer):
         self.limit_reached = False
         self.results_returned = True
         self.timeoutmsg = "%s operation failed: connection refused by %s at %s" \
-                          % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
+                          % (self.engine.options.operation.capitalize(), self.integration_capitalized, self.target)
         self.required_jars = []
         self.spark_logging_level = self.config("logging.level", required=True, defaultvalue="ERROR",
                                                choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING", "OFF"]).upper()
@@ -54,63 +54,7 @@ class Spark(SpextralAnalyzer):
 
     @property
     def schema(self):
-        """
-        Example message JSON:
-
-            {
-              "spxtrl": {
-                "meta": {
-                  "sent": "2020-02-01T17:05:44.099229",
-                  "spxv": "0.0.1",
-                  "spxh": {
-                    "name": "MacBook-Pro.lan",
-                    "fqdn": "macbook-pro.lan",
-                    "ips": "192.168.9.161"
-                  }
-                },
-                "data": [
-                    {
-                        "spxtrlbkt": "flan",
-                        "spxtrldata": "91.224.160.4 - - [15/Oct/2019:17:54:08 -0400] \"POST /wp-login.php HTTP/1.0\" 200 2967 \"http://nationalphilosophicalcounselingassociation.org/\" \"Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/535.19 (KHTML, like Gecko) Chrome/18.0.1025.162 Safari/535.19 Flan/0.0.37 (https://bret.guru/flan)\"",
-                        "spxtrlephn": "MacBook-Pro.lan",
-                        "spxtrlid": "e52d1ce64560514646aa",
-                        "spxtrlsrc": "/var/bret/out/access.log",
-                        "spxtrlstyp": "bret_access_combined",
-                        "spxtrlts1": "15/Oct/2019:17:54:08 -0400",
-                        "spxtrlts2": "20191015175408",
-                        "spxtrlts3": "1571176448",
-                        "spxtrlx": "1571198413"
-                    } (,...)
-                ]
-              }
-            }
-
-        """
-        spxh = StructType()\
-            .add("name", StringType(), nullable=False)\
-            .add("fqdn", StringType(), nullable=False)\
-            .add("ips", StringType(), nullable=False)
-        meta = StructType()\
-            .add("sent", StringType(), nullable=False)\
-            .add("spxv", StringType(), nullable=False)\
-            .add("spxh", spxh)
-        event = StructType()\
-            .add("spxtrlbkt", StringType(), nullable=False)\
-            .add("spxtrldata", StringType(), nullable=False)\
-            .add("spxtrlephn", StringType(), nullable=False)\
-            .add("spxtrlid", StringType(), nullable=False)\
-            .add("spxtrlsrc", StringType(), nullable=False)\
-            .add("spxtrlstyp", StringType(), nullable=False)\
-            .add("spxtrlts1", StringType(), nullable=False)\
-            .add("spxtrlts2", StringType(), nullable=False)\
-            .add("spxtrlts3", StringType(), nullable=False)\
-            .add("spxtrlx", StringType(), nullable=False)
-        spxtrl = StructType().\
-            add("meta", meta).\
-            add("data", ArrayType(event))
-        schema = StructType().\
-            add("spxtrl", spxtrl)
-        return schema
+        return self.engine.service.message_schema.sparksql
 
     def _check4requiredextraclasses(self, spark_home):
         if not globals.SPARK_REQUIRED_EXTRACLASS:
@@ -204,11 +148,11 @@ class Spark(SpextralAnalyzer):
             self.sc._jvm.org.apache.log4j.LogManager.getLogger("org").setLevel(log4j_logging_level)
             self.sc._jvm.org.apache.log4j.LogManager.getLogger("akka").setLevel(log4j_logging_level)
             return sc_conf
-        except SpextralTimeoutWarning as w:
+        except SpextralTimeout as w:
             pass
 
     def connect(self, **kwargs):
-        info("Connecting to %s analyze cluster at %s" % (self.integration.capitalize(), self.target))
+        info("Connecting to %s analyze cluster at %s" % (self.integration_capitalized, self.target))
         self._prepare()
         try:
             self.session = SparkSession \
@@ -218,8 +162,8 @@ class Spark(SpextralAnalyzer):
                 .getOrCreate()
             self.results = '__QUERY_PENDING__'
         except Exception as e:
-            error("establishing %s session at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
-        info("Connected to %s %s" % (self.integration.capitalize(), self.sc.version))
+            error("establishing %s session at %s: %s" % (self.integration_capitalized, self.target, str(e)))
+        info("Connected to %s %s" % (self.integration_capitalized, self.sc.version))
 
     @property
     def connected(self):
@@ -244,7 +188,7 @@ class Spark(SpextralAnalyzer):
                     s.option("kafka.%s" % k, v)
                 stream = s.load()
         except Exception as e:
-            error("reading from %s transport stream at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+            error("reading from %s transport stream at %s: %s" % (self.integration_capitalized, self.target, str(e)))
         return stream
 
     def dump(self):

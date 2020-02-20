@@ -17,6 +17,10 @@ class SpextralIntegration:
         assert(self.engine.options.command is not None)
         assert(self.engine.options.operation is not None)
         self.integration = integration.strip().lower()
+        if self.integration == "greatexpectations":
+            self.integration_capitalized = "Great Expectations"
+        else:
+            self.integration_capitalized = self.integration.capitalize()
         self.loginfo = utils.getconfig("spextral", "config", "loginfo", required=True)
         self.logerrors = utils.getconfig("spextral", "config", "logerrors", required=True)
         self.haltonerror = utils.getconfig("spextral", "config", "haltonerror", required=True)

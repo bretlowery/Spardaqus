@@ -5,7 +5,7 @@ try:
 except ImportError:
     import _thread as thread
 
-from spextral.core.exceptions import SpextralTimeoutWarning
+from spextral.core.exceptions import SpextralTimeout
 from spextral.core.utils import info
 
 
@@ -56,7 +56,7 @@ def timeout_after(timeout_interval=None, timeout_message=None):
                     if results == "TIMEDOUT":
                         if timeoutmsg:
                             info(timeoutmsg)
-                        raise SpextralTimeoutWarning
+                        raise SpextralTimeout
             return results
         return inner
     return outer

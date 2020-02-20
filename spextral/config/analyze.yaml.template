@@ -1,7 +1,10 @@
 spextral:
   analyze:
-    endpoint: spark
+    endpoint: pge
     transport: kafka
+  greatexpectations:
+    multithread: true
+    threads: 1
   spark:
     home: /opt/spark/spark
     pyspark.local.ip: 127.0.0.1

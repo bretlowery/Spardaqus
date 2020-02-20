@@ -1,5 +1,4 @@
 import datetime
-from dateutil import parser as dtparser
 
 from spextral.core.utils import \
     error, info, exception

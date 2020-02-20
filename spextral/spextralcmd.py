@@ -188,14 +188,15 @@ class SpextralEngine:
         epn = self.config("endpoint")
         if self.worker == "dumptransport":
             self.endpoint = SpextralNullEndpoint(self, epn)
-            self.endpoint.name = "SpextralDump%s/%s" % (tn.capitalize(), globals.__VERSION__)
+            svcname = "SpextralDump%s/%s" % (tn.capitalize(), globals.__VERSION__)
         else:
             epclass = getattr(importlib.import_module("spextral.%s.%s" % (self.options.operation, epn)), epn.capitalize())
             self.endpoint = epclass(self)
             if self.options.command in ["dump"]:
-                self.endpoint.name = "SpextralDump%s/%s" % (epn.capitalize(), globals.__VERSION__)
+                svcname = "SpextralDump%s/%s" % (epn.capitalize(), globals.__VERSION__)
             else:
-                self.endpoint.name = "Spextral%s%s/%s" % (self.endpoint.integration.capitalize(), self.options.operation.capitalize(), globals.__VERSION__)
+                svcname = "Spextral%s%s/%s" % (self.endpoint.integration_capitalized, self.options.operation.capitalize(), globals.__VERSION__)
+        self.endpoint.name = svcname.replace(" ", "")
         transportclass = getattr(importlib.import_module("spextral.transport.%s" % tn), tn.capitalize())
         self.transport = transportclass(self)
         self.transport.name = self.endpoint.name

@@ -85,7 +85,7 @@ class Splunk(SpextralEndpoint):
         connection_retry_interval = self.config("connection_retry_interval", defaultvalue=60)
         self.target = "%s://%s:%s" % (s, h, p)
         while self.connection_attempts <= max_connection_attempts:
-            info("Connecting to %s at %s" % (self.integration.capitalize(), self.target))
+            info("Connecting to %s at %s" % (self.integration_capitalized, self.target))
             try:
                 self.source = client.connect(
                         scheme=s,
@@ -95,10 +95,10 @@ class Splunk(SpextralEndpoint):
                         password=self.config("password", required=True)
                 )
             except ConnectionRefusedError as e:
-                error("connection refused by %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+                error("connection refused by %s at %s: %s" % (self.integration_capitalized, self.target, str(e)))
                 pass
             except Exception as e:
-                exception("during connection to %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+                exception("during connection to %s at %s: %s" % (self.integration_capitalized, self.target, str(e)))
             if self.connected:
                 info("Connected")
                 break
@@ -106,7 +106,7 @@ class Splunk(SpextralEndpoint):
             info("Connection unsuccessful; retrying in %d seconds..." % connection_retry_interval)
             sleep(connection_retry_interval)
         if self.connection_attempts > max_connection_attempts:
-            error("Max connection attempts exceeded for %s endpointname %s" % (self.integration.capitalize(), self.target))
+            error("Max connection attempts exceeded for %s endpointname %s" % (self.integration_capitalized, self.target))
         self.bucketname = self.config("index", required=True)
         self.bucket = self.source.indexes[self.bucketname]
         return
@@ -122,7 +122,7 @@ class Splunk(SpextralEndpoint):
                         isconnected = True
                         break
             except Exception as e:
-                error("testing connection to %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+                error("testing connection to %s at %s: %s" % (self.integration_capitalized, self.target, str(e)))
         return isconnected
 
     def _buildquery(self, dynamic_query_filter, lookup, lookup_label):
@@ -182,7 +182,7 @@ class Splunk(SpextralEndpoint):
         query = None
         if not self.connected:
             self.connect()
-        instrumentation = self.engine.service.instrumenter.get(tag=self.integration.capitalize())
+        instrumentation = self.engine.service.instrumenter.get(tag=self.integration_capitalized)
         status = "OK"
         rtn = "OK"
         rlist = []
@@ -245,14 +245,14 @@ class Splunk(SpextralEndpoint):
                             else:
                                 status = r.type
                                 if status in self.error_statuses:
-                                    rtn = "While querying %s: %s" % (self.integration.capitalize(), r.message)
+                                    rtn = "While querying %s: %s" % (self.integration_capitalized, r.message)
                                     if query:
                                         rtn = "%s; query attempted = `%s`" % (rtn, query)
                                 elif status in self.warning_statuses:
-                                    info("While querying %s: %s" % (self.integration.capitalize(), r.message))
+                                    info("While querying %s: %s" % (self.integration_capitalized, r.message))
                                     status = "OK"
                     except Exception as e:
-                        exception("querying %s at %s: %s" % (self.integration.capitalize(), self.target, str(e)))
+                        exception("querying %s at %s: %s" % (self.integration_capitalized, self.target, str(e)))
                     self.queue_complete = True
                     if (lookup or instrumentation.counter > 0) and status not in ['FATAL', 'ERROR']:
                         if lookup:
@@ -260,7 +260,7 @@ class Splunk(SpextralEndpoint):
                                 rtn = rlist[0]
                                 info("Metadata answer (%s) = %s" % (lookup_label, rtn))
                             else:
-                                error("%s returned message: %s; query attempted = `%s`" % (self.integration.capitalize(), r.message, query))
+                                error("%s returned message: %s; query attempted = `%s`" % (self.integration_capitalized, r.message, query))
                         else:
                             if self.forward:
                                 info("Queued a total of %d events" % instrumentation.counter)
@@ -269,12 +269,12 @@ class Splunk(SpextralEndpoint):
                                 info("Discarded a total of %d events (extract.yaml::forward = False)" % instrumentation.counter)
         if not datareturned:
             if msg == "spxtrlempty":
-                info("No more %s data in current window. " % self.integration.capitalize())
+                info("No more %s data in current window. " % self.integration_capitalized)
                 self.results_returned = False
             elif msg:
-                error("no results returned from %s; response was: \"%s\"; query attempted = `%s`" % (self.integration.capitalize(), msg, query))
+                error("no results returned from %s; response was: \"%s\"; query attempted = `%s`" % (self.integration_capitalized, msg, query))
             else:
-                error("no response from %s; query attempted = `%s`" % (self.integration.capitalize(), query))
+                error("no response from %s; query attempted = `%s`" % (self.integration_capitalized, query))
         if lookup:
             return rtn
         else:

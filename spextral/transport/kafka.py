@@ -11,7 +11,7 @@ from confluent_kafka import KafkaException, KafkaError, Producer, Consumer
 
 from spextral import globals
 from spextral.core.decorators import timeout_after
-from spextral.core.exceptions import SpextralTimeoutWarning
+from spextral.core.exceptions import SpextralTimeout, SpextralWaitExpired
 from spextral.core.metaclasses import SpextralTransport
 from spextral.core.utils import istruthy, mergedicts, getenviron, info, error, exception
 
@@ -55,21 +55,8 @@ class Kafka(SpextralTransport):
                         transporter_kwargs[k] = transporter_options[k]
             self.transporter_options = transporter_kwargs
         self.bucket = self.getbucket()
-        self.envelope = {
-            "spxtrl": {
-                "meta": {
-                        "sent": "%s",
-                        "spxv": globals.__VERSION__,
-                        "spxh": {
-                            "name": socket.gethostname(),
-                            "fqdn": socket.getfqdn(),
-                            "ips": ",".join(socket.gethostbyname_ex(socket.gethostname())[-1]),
-                        },
-                    },
-                "data": []
-            }
-        }
-        self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration.capitalize(), self.target)
+        self.envelope = self.engine.service.message_schema.json
+        self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration_capitalized, self.target)
         self.maxwait = self.config("maxwait", required=False, defaultvalue=0)
 
     def getbucket(self):
@@ -91,13 +78,13 @@ class Kafka(SpextralTransport):
     def connect(self):
         """Connect to the Kafka instance specified in the extract.yaml's (when extracting) or analyze.yaml's (when analyzing) Kafka connection settings."""
         if self.engine.worker == "extract":
-            info("Connecting to %s transport server at %s as a publisher" % (self.integration.capitalize(), self.target))
+            info("Connecting to %s transport server at %s as a publisher" % (self.integration_capitalized, self.target))
             self.transporter = Producer(**self.transporter_options)
         else:
-            info("Connecting to %s transport server at %s as a subscriber" % (self.integration.capitalize(), self.target))
+            info("Connecting to %s transport server at %s as a subscriber" % (self.integration_capitalized, self.target))
             self.transporter = Consumer(**self.transporter_options)
         if self.connected:
-            info("Connected to %s %s" % (self.integration.capitalize(), self.version))
+            info("Connected to %s %s" % (self.integration_capitalized, self.version))
         return
 
     @timeout_after(20)
@@ -142,40 +129,44 @@ class Kafka(SpextralTransport):
 
         que = argstuple[0]
         n = argstuple[1]
-        thread_name = "%s transport thread %d" % (self.integration.capitalize(), n)
+        thread_name = "%s transport thread %d" % (self.integration_capitalized, n)
         self.engine.service.instrumenter.register(groupname=self.integration)
         info("Starting %s" % thread_name)
         instrumentation = self.engine.service.instrumenter.get(thread_name)
         wait_ticks = 0
-        queue_data = None
+        rawmsg = None
         exit_thread = False
         with instrumentation:
             while not exit_thread:
-                while not queue_data:
+                while not rawmsg:
                     try:
-                        queue_data = que.get_nowait()
+                        rawmsg = que.get_nowait()
                     except QueueEmpty:
                         if globals.KILLSIG or \
-                                (instrumentation.counter > 1 and (
+                                (instrumentation.counter >= 1 and (
                                     0 < self.engine.options.limit <= instrumentation.counter
-                                    or (0 < self.maxwait < wait_ticks)
                                     or self.engine.options.command == 'stop'
                                     or self.engine.endpoint.queue_complete
                                 )
                                 ):
                             exit_thread = True
                             break
-                        queue_data = None
+                        rawmsg = None
                         sleep(1)
                         wait_ticks += 1
+                        if 0 < self.maxwait < wait_ticks:
+                            raise SpextralWaitExpired
+                        pass
+                    except SpextralWaitExpired:
+                        info("Max %ds wait time for new messages exceeded; exiting" % self.maxwait)
+                        exit_thread = True
                         pass
                 if exit_thread or globals.KILLSIG:
                     break
                 wait_ticks = 0
-                emptyticks = 0
                 try:
                     # send data
-                    encoded_packet = _packit(queue_data, self.engine.encoding)
+                    encoded_packet = _packit(rawmsg, self.engine.encoding)
                     self.transporter.produce(self.bucket, encoded_packet, on_delivery=__kafkacallback)
                     self.transporter.poll(0)
                     instrumentation.increment()
@@ -193,7 +184,7 @@ class Kafka(SpextralTransport):
                     self._threadend()
                     exception("exception transporting via %s: %s" % (thread_name, str(e)))
                     raise e
-                queue_data = None
+                rawmsg = None
         self._threadend()
         return instrumentation
 
@@ -202,25 +193,61 @@ class Kafka(SpextralTransport):
         return self.transporter.poll()
 
     def receive(self, argstuple=None):
-        """Unloads all Spextral messages from Kafka and sends them to the analyze endpoint."""
+        """
+       THREADSAFETY REQUIRED
+       Unloads all Spextral messages from Kafka and sends them to the analyze endpoint.
+       :param argstuple:
+       :return:
+        """
         que = argstuple[0]
-        self.transporter.subscribe([self.bucket])
-        try:
-            while True:
-                msg = self._poll()
-                if msg:
-                    val = msg.value().decode(self.engine.encoding)
-                    que.put() if que else print(msg.value().decode(self.engine.encoding))
-        except SpextralTimeoutWarning:
-            pass
-        except KafkaException as kx:
-            exception("KafkaException: %s" % str(kx))
-        except KafkaError as ke:
-            error("KafkaError: %s" % str(ke))
-        except Exception as e:
-            exception("Exception: %s" % str(e))
-        finally:
-            globals.KILLSIG = True
+        n = argstuple[1]
+        thread_name = "%s transport thread %d" % (self.integration_capitalized, n)
+        self.engine.service.instrumenter.register(groupname=self.integration)
+        info("Starting %s" % thread_name)
+        instrumentation = self.engine.service.instrumenter.get(thread_name)
+        wait_ticks = 0
+        exit_thread = False
+        with instrumentation:
+            while not exit_thread:
+                self.transporter.subscribe([self.bucket])
+                try:
+                    while True:
+                        rawmsg = self._poll()
+                        if rawmsg:
+                            msg = rawmsg.value().decode(self.engine.encoding)
+                            que.put(msg) if que else print(msg)
+                            instrumentation.increment()
+                            wait_ticks = 0
+                        else:
+                            sleep(1)
+                            wait_ticks += 1
+                        if globals.KILLSIG or \
+                                (instrumentation.counter >= 1 and (
+                                        0 < self.engine.options.limit <= instrumentation.counter
+                                        or self.engine.options.command == 'stop'
+                                )
+                                ):
+                            exit_thread = True
+                            break
+                        if 0 < self.maxwait < wait_ticks:
+                            raise SpextralWaitExpired
+                except SpextralWaitExpired:
+                    info("Max %ds wait time for new messages exceeded; exiting" % self.maxwait)
+                    exit_thread = True
+                    pass
+                except SpextralTimeout:
+                    exit_thread = True
+                    pass
+                except KafkaException as kx:
+                    self._threadend()
+                    exception("KafkaException transporting via %s: %s" % (thread_name, str(kx)))
+                except KafkaError as ke:
+                    self._threadend()
+                    error("KafkaError transporting via %s: %s" % (thread_name, str(ke)))
+                except Exception as e:
+                    self._threadend()
+                    exception("exception transporting via %s: %s" % (thread_name, str(e)))
+                    raise e
 
     def dump(self):
         """Unloads all Spextral messages from Kafka and prints them out to the console instead of sending them to analyze endpoint."""
