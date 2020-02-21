@@ -1,0 +1,28 @@
+spardaqus:
+  analyze:
+    endpoint: [greatexpectations | spark]
+    transport: kafka
+  greatexpectations:
+    multithread: true
+    threads: 1
+    maxwait: 300
+  spark:
+    home: /opt/spark/spark
+    pyspark.local.ip: 127.0.0.1
+    pyspark.python: /usr/local/bin/python3
+    pyspark.driver.python: /usr/local/bin/python3
+    master: local[*]  #  Master must either be yarn, spark, mesos, k8s, or local[n]
+    sparkcontext.options: {}
+    logging.level: INFO
+  kafka:
+    bootstrap.servers: 127.0.0.1:9092
+    group.id: 0
+    topic: default
+    consumer.options: {
+      # 'group.id': 0,
+      # 'security.protocol': 'ssl',
+      # 'ssl.ca.location': 'ca-cert',
+      # 'ssl.certificate.location': 'cert-signed',
+      # 'ssl.key.location': 'ca-key',
+      # 'ssl.key.password': 'test1234'
+    }

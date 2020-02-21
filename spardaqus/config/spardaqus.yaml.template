@@ -1,0 +1,17 @@
+spardaqus:
+  config:
+    enabled: true
+    log.enabled: true
+    log.console: true
+    log.file: "/var/log/spardaqus/spardaqus.log"
+    log.rotation: "1 hour"
+    log.compression: zip
+    log.level: info
+    log.format: "{time} {level} {message}"
+    log.time.format: "YY/MM/DD HH:mm:ss"
+    encoding: utf-8
+    keysize: 32  # 8 - 128 characters
+  redis:
+    host: <hostname>
+    port: <portname>
+    db: 0
