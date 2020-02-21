@@ -1,6 +1,6 @@
-## Spextral -- SPlunk EXtract TRansform And Load into Apache Spark for data analysis & data quality assurance (ALPHA)
-* Customize your Splunk replication<br>
-* Load Splunk event or metrics data from any Splunk index with a query <br>
-* Transform some or all of the data<br>
-* Load the transformed data into Apache Spark for analysis or another Splunk index<br>
-* Utilize Apache Deequ for data quality assurance of Splunk data<br>
+## Spardaqus: Data quality assurance for Splunk (IN PROGRESS)
+* Independently verify the integrity of data in your Splunk SIEM
+* Load Splunk event or metrics data from any Splunk index with a query (COMPLETED)
+* Perform data quality assurance checks on the events/metrics using Pandas/Great Expectations (IN PROGRESS) or Apache Spark/Deequ (TBD)
+* Load the DQ test results back into a Splunk dashboard for visualization (TBD)
+* Send out DQ alerts via Slack (TBD)
