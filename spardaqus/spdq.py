@@ -7,7 +7,7 @@ from time import sleep
 from loguru import logger
 
 from spardaqus import globals
-from spardaqus.service import SpardaqusService
+from spardaqus.spdqservice import SpardaqusService
 from spardaqus.core.metaclasses import SpardaqusNullEndpoint
 import spardaqus.core.profiling as profile
 from spardaqus.core.utils import \
