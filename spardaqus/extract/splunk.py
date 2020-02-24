@@ -306,18 +306,9 @@ class Splunk(SpardaqusEndpoint):
         via the transport mechanism to downstream consumers.
         :return:
         """
-        query_fragment = 'eval spdqid=substr(sha512(host + "::" + _raw),1,%d), ' \
-                         'spdqtskey=strftime(_time, "%%Y%%m%%d%%H%%M%%S"), '\
-                         'spdqtstxt=strftime(%s, "%s"), ' \
-                         'spdqtssrc=_time, ' \
-                         'spdqdata=_raw, ' \
-                         'spdqidxn=_index, ' \
-                         'spdqephn=host,' \
-                         'spdqsrc=source,' \
-                         'spdqstyp=sourcetype, ' \
-                         'spdqbkt="%s" ' \
-                         '| appendpipe [ stats count as spdqempty | where spdqempty==0 ] | table spdq* ' % \
-                         (self.keysize, self.timestamp_field_name, self.timestamp_field_format, self.bucketname)
+        query_fragment = self.engine.service.message_schema.query_fragment
+        query_fragment = 'eval %s | appendpipe [ stats count as spdqempty | where spdqempty==0 ] | table spdq* ' % query_fragment
+        query_fragment = query_fragment % (self.keysize, self.bucketname, self.timestamp_field_name, self.timestamp_field_format)
         return self._executequery(query_fragment)
 
     @property

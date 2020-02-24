@@ -7,117 +7,105 @@ from pyspark.sql.types import StringType, StructType, ArrayType
 
 from spardaqus import globals
 from spardaqus.core.utils import mergedicts
+from spardaqus.core.exceptions import SpardaqusMissingSparkSQLStructMetadata, SpardaqusUnknownSparkSQLStruct
 
 
 class SpardaqusMessage:
 
     @staticmethod
-    def _flatten(json):
+    def _struct2json(sparksqlstruct):
 
-        def __f(r, x):
-            if "fields" in x.keys():
-                if type(x["fields"]) is list:
-                    for fields in x["fields"]:
-                        field = {}
-                        if type(fields["type"]) is str:
-                            m = fields["metadata"]
-                            if "literal" in m.keys():
-                                field = {fields["name"]: m["literal"]}
-                        else:
-                            inner = __f(r, fields["type"])
-                            field = {fields["name"]: inner}
-                        r = mergedicts(r, field)
-                    return r
-                elif type(x["fields"]) is dict:
-                    r = mergedicts(r, {x["name"]: {}})
-                    return __f(r, x["type"])
-            elif x["type"] == "string":
-                m = x["metadata"]
-                if "literal" in m:
-                    field = {x["name"]: m["literal"]}
-                    r = mergedicts(r, field)
-                    return r
+        def __parse(r, x):
+            if type(x) is list:
+                for y in x:
+                    r = __parse(r, y)
+            else:
+                n = x["name"] if "name" in x.keys() else None
+                f = x["fields"] if "fields" in x.keys() else None
+                t = x["type"] if "type" in x.keys() else None
+                if t:
+                    if type(t) is str:
+                        if t == "struct":
+                            r = __parse(r, f[0])
+                        elif t == "string":
+                            m = x["metadata"]
+                            if "default" in m.keys():
+                                r = mergedicts(r, {n: m["default"]})
+                            else:
+                                raise SpardaqusMissingSparkSQLStructMetadata
+                    elif type(t) is dict:
+                        if "elementType" in t.keys():
+                            t = t["elementType"]
+                        z = {n: [__parse({}, t["fields"])]}
+                        r = mergedicts(r, z)
+            return r
 
-        return __f({}, json)
+        j = __parse({}, sparksqlstruct.jsonValue())
+        return j
 
-    def __init__(self, variant):
+    @staticmethod
+    def _struct2queryfragment(sparksqlstruct, integration):
+
+        def __parse(s, x):
+            if type(x) is list:
+                for y in x:
+                    s = __parse(s, y)
+            else:
+                n = x["name"] if "name" in x.keys() else None
+                f = x["fields"] if "fields" in x.keys() else None
+                t = x["type"] if "type" in x.keys() else None
+                if t:
+                    if type(t) is str:
+                        if t == "struct":
+                            s = __parse(s, f[0])
+                        elif t == "string":
+                            m = x["metadata"]
+                            if integration in m.keys():
+                                if m[integration]:
+                                    s = "%s %s = %s" % (s, n, m[integration])
+                    elif type(t) is dict:
+                        if "elementType" in t.keys():
+                            t = t["elementType"]
+                        s = __parse(s, t["fields"])
+            return s
+
+        qf = __parse("", sparksqlstruct.jsonValue())
+        return qf
+
+    def __init__(self, integration):
 
         event = StructType() \
-            .add("spdqid", StringType(), nullable=False, metadata={"splunk": "substr(sha512(host + \"::\" + _raw), 1, %d),"}) \
-            .add("spdqbkt", StringType(), nullable=False, metadata={"splunk": "\"%s\","}) \
-            .add("spdqdata", StringType(), nullable=False, metadata={"splunk": "_raw,"}) \
-            .add("spdqidxn", StringType(), nullable=False, metadata={"splunk": "_index,"}) \
-            .add("spdqephn", StringType(), nullable=False, metadata={"splunk": "host,"}) \
-            .add("spdqsrc", StringType(), nullable=False, metadata={"splunk": "source,"}) \
-            .add("spdqstyp", StringType(), nullable=False, metadata={"splunk": "sourcetype,"}) \
-            .add("spdqtskey", StringType(), nullable=False, metadata={"splunk": "strftime(_time, \"%%Y%%m%%d%%H%%M%%S\"),"}) \
-            .add("spdqtstxt", StringType(), nullable=False, metadata={"splunk": "strftime(%s, \"%s\"),"}) \
-            .add("spdqtssrc", StringType(), nullable=False, metadata={"splunk": "_time"})
-
+            .add("spdqid", StringType(), nullable=False, metadata={"splunk": "substr(sha512(host + \"::\" + _raw), 1, %d),", "default": ""}) \
+            .add("spdqbkt", StringType(), nullable=False, metadata={"splunk": "\"%s\",", "default": ""}) \
+            .add("spdqdata", StringType(), nullable=False, metadata={"splunk": "_raw,", "default": ""}) \
+            .add("spdqidxn", StringType(), nullable=False, metadata={"splunk": "_index,", "default": ""}) \
+            .add("spdqephn", StringType(), nullable=False, metadata={"splunk": "host,", "default": ""}) \
+            .add("spdqsrc", StringType(), nullable=False, metadata={"splunk": "source,", "default": ""}) \
+            .add("spdqstyp", StringType(), nullable=False, metadata={"splunk": "sourcetype,", "default": ""}) \
+            .add("spdqtskey", StringType(), nullable=False, metadata={"splunk": "strftime(_time, \"%%Y%%m%%d%%H%%M%%S\"),", "default": ""}) \
+            .add("spdqtstxt", StringType(), nullable=False, metadata={"splunk": "strftime(%s, \"%s\"),", "default": ""}) \
+            .add("spdqtssrc", StringType(), nullable=False, metadata={"splunk": "_time", "default": ""})
 
         spdqh = StructType() \
-            .add("name", StringType(), nullable=False, metadata={"literal": socket.gethostname()}) \
-            .add("fqdn", StringType(), nullable=False, metadata={"literal": socket.getfqdn()}) \
-            .add("ips", StringType(), nullable=False, metadata={"literal": ",".join(socket.gethostbyname_ex(socket.gethostname())[-1])})
+            .add("name", StringType(), nullable=False, metadata={"splunk": "", "default": socket.gethostname()}) \
+            .add("fqdn", StringType(), nullable=False, metadata={"splunk": "", "default": socket.getfqdn()}) \
+            .add("ips", StringType(), nullable=False, metadata={"splunk": "", "default": ",".join(socket.gethostbyname_ex(socket.gethostname())[-1])})
 
         meta = StructType() \
-            .add("sent", StringType(), nullable=False, metadata={"literal": "%s"}) \
-            .add("spdqv", StringType(), nullable=False, metadata={"literal": globals.__VERSION__}) \
+            .add("sent", StringType(), nullable=False, metadata={"splunk": "", "default": "%s"}) \
+            .add("spdqv", StringType(), nullable=False, metadata={"splunk": "", "default": globals.__VERSION__}) \
             .add("spdqh", spdqh)
 
         spdq = StructType(). \
             add("meta", meta). \
             add("data", ArrayType(event))
-        #
-        self.sparksqlstruct = StructType(). \
-            add("spdq", spdq)
 
-        jv = self.sparksqlstruct.jsonValue()
-        x = self._flatten(jv)
+        self.spark_sql_struct = StructType().add("spdq", spdq)
 
-        template_message = {
-              "spdq": {
-                "meta": {
-                  "sent": "%timestamp%",
-                  "spdqv": "%globals.__VERSION__%",
-                  "spdqh": {
-                    "name": "%socket.gethostname()%",
-                    "fqdn": "%socket.getfqdn()%",
-                    "ips": "%\",\".join(socket.gethostbyname_ex(socket.gethostname())[-1])%"
-                  }
-                },
-                "data": [
-                    {
-                        "spdqbkt": "",
-                        "spdqdata": "",
-                        "spdqephn": "",
-                        "spdqid": "",
-                        "spdqsrc": "",
-                        "spdqstyp": "",
-                        "spdqtskey": "",
-                        "spdqtstxt": "",
-                        "spdqtssrc": "",
-                        "spdqx": ""
-                    }
-                ]
-              }
-        }
+        self.json_envelope = self._struct2json(self.spark_sql_struct)
 
-        #
-        self.json = {
-            "spdq": {
-                    "meta": {
-                            "sent": "%s",
-                            "spdqv": globals.__VERSION__,
-                            "spdqh": {
-                                "name": socket.gethostname(),
-                                "fqdn": socket.getfqdn(),
-                                "ips": ",".join(socket.gethostbyname_ex(socket.gethostname())[-1]),
-                            },
-                        },
-                    "data": []
-                }
-            }
+        if integration == "splunk":
+            self.query_fragment = self._struct2queryfragment(self.spark_sql_struct, integration)
 
 
 class SpardaqusDataFrame(DataFrame):
@@ -146,4 +134,3 @@ class SpardaqusDataFrame(DataFrame):
         k = self.getspardaqusmessagekey(msg)
         v = self.getspardaqusmessagevalue(msg)
         self.concat(json_normalize({k: v}))
-

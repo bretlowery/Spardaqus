@@ -130,7 +130,7 @@ class Kafka(SpardaqusTransport):
         self.engine.service.instrumenter.register(groupname=self.integration)
         info("Starting %s" % thread_name)
         instrumentation = self.engine.service.instrumenter.get(thread_name)
-        envelope = self.engine.service.message_schema.json
+        envelope = self.engine.service.message_schema.json_envelope
         wait_ticks = 0
         rawmsg = None
         exit_thread = False
