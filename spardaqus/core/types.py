@@ -12,65 +12,42 @@ from spardaqus.core.exceptions import SpardaqusMissingSparkSQLStructMetadata, Sp
 
 class SpardaqusMessage:
 
-    @staticmethod
-    def _struct2json(sparksqlstruct):
-
-        def __parse(r, x):
-            if type(x) is list:
-                for y in x:
-                    r = __parse(r, y)
-            else:
-                n = x["name"] if "name" in x.keys() else None
-                f = x["fields"] if "fields" in x.keys() else None
-                t = x["type"] if "type" in x.keys() else None
-                if t:
-                    if type(t) is str:
-                        if t == "struct":
-                            r = __parse(r, f[0])
-                        elif t == "string":
-                            m = x["metadata"]
-                            if "default" in m.keys():
-                                r = mergedicts(r, {n: m["default"]})
-                            else:
-                                raise SpardaqusMissingSparkSQLStructMetadata
-                    elif type(t) is dict:
-                        if "elementType" in t.keys():
-                            t = t["elementType"]
-                        z = {n: [__parse({}, t["fields"])]}
+    def __parse(self, r, x, i):
+        if type(x) is list:
+            for y in x:
+                r = self.__parse(r, y, i)
+        else:
+            n = x["name"] if "name" in x.keys() else None
+            f = x["fields"] if "fields" in x.keys() else None
+            t = x["type"] if "type" in x.keys() else None
+            if t:
+                if type(t) is str:
+                    if t == "struct":
+                        r = self.__parse(r, f[0], i)
+                    elif t == "string":
+                        m = x["metadata"]
+                        if i in m.keys():
+                            if i == "default":
+                                r = mergedicts(r, {n: m[i]})
+                            elif m[i]:
+                                r = "%s %s = %s" % (r, n, m[i])
+                        elif i == "default":
+                            raise SpardaqusMissingSparkSQLStructMetadata
+                elif type(t) is dict:
+                    if "elementType" in t.keys():
+                        t = t["elementType"]
+                    if i == "default":
+                        z = {n: [self.__parse({}, t["fields"], i)]}
                         r = mergedicts(r, z)
-            return r
+                    else:
+                        r = self.__parse(r, t["fields"], i)
+        return r
 
-        j = __parse({}, sparksqlstruct.jsonValue())
-        return j
+    def _struct2json(self, sparksqlstruct):
+        return self.__parse({}, sparksqlstruct.jsonValue(), "default")
 
-    @staticmethod
-    def _struct2queryfragment(sparksqlstruct, integration):
-
-        def __parse(s, x):
-            if type(x) is list:
-                for y in x:
-                    s = __parse(s, y)
-            else:
-                n = x["name"] if "name" in x.keys() else None
-                f = x["fields"] if "fields" in x.keys() else None
-                t = x["type"] if "type" in x.keys() else None
-                if t:
-                    if type(t) is str:
-                        if t == "struct":
-                            s = __parse(s, f[0])
-                        elif t == "string":
-                            m = x["metadata"]
-                            if integration in m.keys():
-                                if m[integration]:
-                                    s = "%s %s = %s" % (s, n, m[integration])
-                    elif type(t) is dict:
-                        if "elementType" in t.keys():
-                            t = t["elementType"]
-                        s = __parse(s, t["fields"])
-            return s
-
-        qf = __parse("", sparksqlstruct.jsonValue())
-        return qf
+    def _struct2queryfragment(self, sparksqlstruct, integration):
+        return self.__parse("", sparksqlstruct.jsonValue(), integration)
 
     def __init__(self, integration):
 
