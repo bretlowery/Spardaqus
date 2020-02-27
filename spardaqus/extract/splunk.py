@@ -59,6 +59,8 @@ class Splunk(SpardaqusEndpoint):
         elif self.on_no_results == "halt":
             self.on_no_results = "exit"
         self.on_no_results_wait_interval = self.config("on_no_results_wait_interval", required=True, intrange=[1, 604800]) if self.on_no_results == "wait" else None
+        self.include_fields = self.config("include_fields", defaultvalue="all", converttolist=True)
+        self.exclude_fields = self.config("exclude_fields", defaultvalue="none", converttolist=True)
 
     def _createwindow(self):
         self.window = Window(endpointinstance=self)
@@ -206,7 +208,8 @@ class Splunk(SpardaqusEndpoint):
             with thread_context:
                 with instrumentation:
                     try:
-                        for r in results.ResultsReader(io.BufferedReader(SpardaqusStreamBuffer(self.source.jobs.export(query, **kwargs_export)))):
+                        # for r in results.ResultsReader(io.BufferedReader(SpardaqusStreamBuffer(self.source.jobs.export(query, **kwargs_export)))):
+                        for r in results.ResultsReader(io.BufferedReader(self.source.jobs.export(query, **kwargs_export))):
                             if globals.KILLSIG:
                                 break
                             if isinstance(r, dict):
@@ -236,7 +239,7 @@ class Splunk(SpardaqusEndpoint):
                                         if self.engine.options.profile:
                                             profile.memory()
                                     if not batch_end_et:
-                                        batch_end_et = r["spdqx"]
+                                        batch_end_et = r["spdqstop"]
                                     if self.engine.options.limit > 0:
                                         if self.engine.options.limit == self.grand_total_sent:
                                             self.limit_reached = True
@@ -307,7 +310,23 @@ class Splunk(SpardaqusEndpoint):
         :return:
         """
         query_fragment = self.engine.service.message_schema.query_fragment
-        query_fragment = 'eval %s | appendpipe [ stats count as spdqempty | where spdqempty==0 ] | table spdq* ' % query_fragment
+        query_fragment = 'eval %s | appendpipe [ stats count as spdqempty | where spdqempty==0 ] | table *' % query_fragment
+        if self.exclude_fields:
+            fields = ""
+            for field in self.exclude_fields:
+                if field == "none":
+                    break
+                fields = "%s %s" % (fields, field)
+            if fields:
+                query_fragment = "%s | fields -%s" % (query_fragment, fields)
+        if self.include_fields:
+            fields = ""
+            for field in self.include_fields:
+                if field in ["all", "*"]:
+                    break
+                fields = "%s %s" % (fields, field)
+            if fields:
+                query_fragment = "%s | fields +%s" % (query_fragment, fields)
         query_fragment = query_fragment % (self.keysize, self.bucketname, self.timestamp_field_name, self.timestamp_field_format)
         return self._executequery(query_fragment)
 
