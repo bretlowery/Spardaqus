@@ -14,6 +14,7 @@ from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired
 from spardaqus.core.metaclasses import SpardaqusTransport
 from spardaqus.core.utils import istruthy, mergedicts, getenviron, info, error, exception
 
+
 class Kafka(SpardaqusTransport):
 
     def __init__(self, engine):
