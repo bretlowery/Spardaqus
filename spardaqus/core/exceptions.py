@@ -13,3 +13,11 @@ class SpardaqusMissingSparkSQLStructMetadata(LookupError):
 class SpardaqusUnknownSparkSQLStruct(TypeError):
     pass
 
+
+class SpardaqusSparkSQLStructParseError(ValueError):
+    pass
+
+
+class SpardaqusSparkSQLStructMissingRequiredElementsError(ValueError):
+    pass
+
