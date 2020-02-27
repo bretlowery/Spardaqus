@@ -127,8 +127,6 @@ class Greatexpectations(SpardaqusAnalyzer):
                             wait_ticks += 1
                             if 0 < self.maxwait < wait_ticks:
                                 raise SpardaqusWaitExpired
-                            if 0 < self.engine.options.limit <= instrumentation.counter:
-                                break
                             pass
                     except SpardaqusWaitExpired:
                         info("Max %ds wait time for new messages exceeded; exiting" % self.maxwait)
