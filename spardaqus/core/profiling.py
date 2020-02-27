@@ -37,12 +37,9 @@ def memory():
 
 def start(tag=None):
     """Starts a yappi profiling session."""
-
-    pstats_file = '/var/log/spardaqus/yappi.%s.%s.%s%s' % (globals.__NAME__, globals.__VERSION__, "%s." % tag if tag else "", nowstr())
+    pstats_file = '/var/log/yappi.%s.%s.%s%s' % (globals.__NAME__, globals.__VERSION__, "%s." % tag if tag else "", nowstr())
     yappi.clear_stats()
     yappi.start()
-    info("** --profile specified; performance profiling started")
-    info("** --profile pstats data will be written to %s" % pstats_file)
     return pstats_file
 
 
