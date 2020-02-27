@@ -197,11 +197,15 @@ class Kafka(SpardaqusTransport):
        :param argstuple:
        :return:
         """
-        que = argstuple[0]
-        n = argstuple[1]
-        thread_name = "%s transport thread %d" % (self.integration_capitalized, n)
+        if argstuple:
+            que = argstuple[0]
+            n = argstuple[1]
+            thread_name = "%s transport thread %d" % (self.integration_capitalized, n)
+            info("Starting %s" % thread_name)
+        else:
+            que = None
+            thread_name = "%s transport thread 1"
         self.engine.service.instrumenter.register(groupname=self.integration)
-        info("Starting %s" % thread_name)
         instrumentation = self.engine.service.instrumenter.get(thread_name)
         wait_ticks = 0
         exit_thread = False
