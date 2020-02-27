@@ -15,7 +15,7 @@ import pandas as pd
 
 from spardaqus import globals
 from spardaqus.core.decorators import timeout_after
-from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired
+from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired, SpardaqusMessageParseError
 from spardaqus.core.metaclasses import SpardaqusAnalyzer
 from spardaqus.core.utils import boolish,\
     error,\
@@ -86,14 +86,20 @@ class Greatexpectations(SpardaqusAnalyzer):
         return event["spdqdata"]
 
     def append2results(self, rawmsgstr):
-        d = {"keys": [], "values": []}
         rawmsg = json.loads(rawmsgstr)
+        if "spdq" not in rawmsg.keys():
+            raise SpardaqusMessageParseError
+        if "data" not in  rawmsg["spdq"].keys():
+            raise SpardaqusMessageParseError
         eventlist = rawmsg["spdq"]["data"]
-        if type(eventlist) is list:
-            if self.results.columns.empty:
-                self.results = pd.DataFrame(columns=eventlist[0].keys())
-            df = pd.json_normalize(eventlist, max_level=0)
-            self.results = pd.concat([self.results, df], axis=0)
+        if type(eventlist) is not list:
+            raise SpardaqusMessageParseError
+        if type(eventlist[0]) is not dict:
+            raise SpardaqusMessageParseError
+        if self.results.columns.empty:
+            self.results = pd.DataFrame(columns=eventlist[0].keys())
+        df = pd.json_normalize(eventlist, max_level=0)
+        self.results = pd.concat([self.results, df], axis=0)
         return
 
     def dump(self):

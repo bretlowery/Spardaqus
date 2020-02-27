@@ -21,3 +21,6 @@ class SpardaqusSparkSQLStructParseError(ValueError):
 class SpardaqusSparkSQLStructMissingRequiredElementsError(ValueError):
     pass
 
+
+class SpardaqusMessageParseError(ValueError):
+    pass
