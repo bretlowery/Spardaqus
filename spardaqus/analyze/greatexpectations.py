@@ -127,6 +127,8 @@ class Greatexpectations(SpardaqusAnalyzer):
                             wait_ticks += 1
                             if 0 < self.maxwait < wait_ticks:
                                 raise SpardaqusWaitExpired
+                            if 0 < self.engine.options.limit <= instrumentation.counter:
+                                break
                             pass
                     except SpardaqusWaitExpired:
                         info("Max %ds wait time for new messages exceeded; exiting" % self.maxwait)
@@ -139,11 +141,10 @@ class Greatexpectations(SpardaqusAnalyzer):
                 self.append2results(rawmsg)
                 instrumentation.increment()
                 rawmsg = None
-                if self.engine.options.limit > 0:
-                    if self.engine.options.limit == instrumentation.counter:
-                        self.limit_reached = True
-                        info("--limit value (%d) reached" % self.engine.options.limit)
-                        break
+                if 0 < self.engine.options.limit <= instrumentation.counter:
+                    self.limit_reached = True
+                    info("--limit value (%d) reached" % self.engine.options.limit)
+                    break
             if instrumentation.counter > 0:
                 print(tabulate(self.results, headers='keys', tablefmt='psql'))
         self.close()
