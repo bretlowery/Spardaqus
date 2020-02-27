@@ -143,8 +143,6 @@ class SpardaqusService(SystemService):
             pstats_file = None
             if self.engine.options.profile:
                 pstats_file = profile.start()
-                info("** --profile specified; starting performance profiling")
-                info("** pstats data will be written to /var/log/yappi.%s.%s" % (globals.__NAME__, globals.__VERSION__))
             self.engine.transport.connect()
             if self.engine.transport.connected:
                 if not self.engine.worker == "dumptransport":
