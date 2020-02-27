@@ -13,6 +13,8 @@ spardaqus:
     sourcetype_filter: none
     query_filter: none
     query_timeout: 30
+    exclude_fields: _raw,punct,index,_bkt,_cd,_indextime,_kv,_si,_sourcetype
+    include_fields: all
     sample_percentage: 100
     scheme: https
     batch_goal: 100000  # must be <= Splunk's maxresultrows setting (located in $SPLUNK_HOME/etc/system/default/limits.conf), which will be used instead if batch_goal's value here exceeds it.

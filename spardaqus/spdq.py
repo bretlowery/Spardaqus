@@ -109,8 +109,8 @@ class SpardaqusEngine:
         self.scrub_inputs()
         self.init_logging()
         info("Halting Spardaqus") if self.options.command == "stop" else info("Initializing Spardaqus")
-        if self.options.profile:
-            profile.memory()
+        #if self.options.profile:
+        #    profile.memory()
         if debugging():
             info("Debugging mode detected")
         self.create_service_topology()

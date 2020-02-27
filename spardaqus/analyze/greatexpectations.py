@@ -11,12 +11,12 @@ from tabulate import tabulate
 from time import sleep
 
 import great_expectations as ge
+from pandas import DataFrame, concat
 
 from spardaqus import globals
 from spardaqus.core.decorators import timeout_after
 from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired
 from spardaqus.core.metaclasses import SpardaqusAnalyzer
-from spardaqus.core.types import SpardaqusDataFrame
 from spardaqus.core.utils import boolish,\
     error,\
     exception,\
@@ -71,11 +71,30 @@ class Greatexpectations(SpardaqusAnalyzer):
             thread_context.submit(self.engine.transport.receive, (self.engine.service.que, n,))
         self.engine.service.instrumenter.register(groupname=self.integration)
         self.limit_reached = False
-        self.results = SpardaqusDataFrame()
+        self.results = DataFrame()
 
     @property
     def connected(self):
         return True
+
+    @staticmethod
+    def _getmsgkey(event):
+        return "%s:%s" % (event["spdqtskey"], event["spdqid"])
+
+    @staticmethod
+    def _getmsgdata(event):
+        return event["spdqdata"]
+
+    def msg2df(self, rawmsgstr):
+        d = {"keys": [], "values": []}
+        rawmsg = json.loads(rawmsgstr)
+        eventlist = rawmsg["spdq"]["data"]
+        for event in eventlist:
+            k = self._getmsgkey(event)
+            v = self._getmsgdata(event)
+            d["keys"].append(k)
+            d["values"].append(v)
+        return DataFrame(d)
 
     def dump(self):
         instrumentation = self.engine.service.instrumenter.get("GreatExpectationsDump")
@@ -111,8 +130,7 @@ class Greatexpectations(SpardaqusAnalyzer):
                         exception("Exception during analysis: %s" % str(e))
                 if exit_thread or globals.KILLSIG:
                     break
-                x = self.results.unpackspardaqusmessage(rawmsg)
-                self.results.add(rawmsg)
+                self.results = concat([self.results, self.msg2df(rawmsg)])
                 instrumentation.increment()
                 rawmsg = None
                 if self.engine.options.limit > 0:
@@ -135,4 +153,3 @@ class Greatexpectations(SpardaqusAnalyzer):
 
     def close(self):
         globals.KILLSIG = True
-

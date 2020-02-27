@@ -10,6 +10,9 @@ class SpardaqusMissingSparkSQLStructMetadata(LookupError):
     pass
 
 
-class SpardaqusUnknownSparkSQLStruct(TypeError):
+class SpardaqusSparkSQLStructParseError(TypeError):
     pass
 
+
+class SpardaqusSparkSQLStructMissingRequiredElementsError(TypeError):
+    pass
