@@ -11,7 +11,7 @@ from tabulate import tabulate
 from time import sleep
 
 import great_expectations as ge
-from pandas import DataFrame, concat
+import pandas as pd
 
 from spardaqus import globals
 from spardaqus.core.decorators import timeout_after
@@ -71,7 +71,7 @@ class Greatexpectations(SpardaqusAnalyzer):
             thread_context.submit(self.engine.transport.receive, (self.engine.service.que, n,))
         self.engine.service.instrumenter.register(groupname=self.integration)
         self.limit_reached = False
-        self.results = DataFrame()
+        self.results = pd.DataFrame()
 
     @property
     def connected(self):
@@ -85,16 +85,16 @@ class Greatexpectations(SpardaqusAnalyzer):
     def _getmsgdata(event):
         return event["spdqdata"]
 
-    def msg2df(self, rawmsgstr):
+    def append2results(self, rawmsgstr):
         d = {"keys": [], "values": []}
         rawmsg = json.loads(rawmsgstr)
         eventlist = rawmsg["spdq"]["data"]
-        for event in eventlist:
-            k = self._getmsgkey(event)
-            v = self._getmsgdata(event)
-            d["keys"].append(k)
-            d["values"].append(v)
-        return DataFrame(d)
+        if type(eventlist) is list:
+            if self.results.columns.empty:
+                self.results = pd.DataFrame(columns=eventlist[0].keys())
+            df = pd.json_normalize(eventlist, max_level=0)
+            self.results = pd.concat([self.results, df], axis=0)
+        return
 
     def dump(self):
         instrumentation = self.engine.service.instrumenter.get("GreatExpectationsDump")
@@ -130,7 +130,7 @@ class Greatexpectations(SpardaqusAnalyzer):
                         exception("Exception during analysis: %s" % str(e))
                 if exit_thread or globals.KILLSIG:
                     break
-                self.results = concat([self.results, self.msg2df(rawmsg)])
+                self.append2results(rawmsg)
                 instrumentation.increment()
                 rawmsg = None
                 if self.engine.options.limit > 0:
