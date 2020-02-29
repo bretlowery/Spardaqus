@@ -1,6 +1,6 @@
 import redis
 from redis.exceptions import ConnectionError
-from spardaqus.core.utils import getconfig, exception
+from spardaqus.core.utils import getconfig, error
 
 
 class Redis:
