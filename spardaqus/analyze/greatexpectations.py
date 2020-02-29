@@ -15,9 +15,10 @@ import pandas as pd
 
 from spardaqus import globals
 from spardaqus.core.decorators import timeout_after
-from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired, SpardaqusMessageParseError
+from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired, SpardaqusMessageParseError, SpardaqusMessageCRCMismatchError
 from spardaqus.core.metaclasses import SpardaqusAnalyzer
 from spardaqus.core.utils import boolish,\
+    crc, \
     error,\
     exception,\
     getconfig,\
@@ -73,6 +74,7 @@ class Greatexpectations(SpardaqusAnalyzer):
         self.limit_reached = False
         self.results = pd.DataFrame()
 
+
     @property
     def connected(self):
         return True
@@ -85,17 +87,13 @@ class Greatexpectations(SpardaqusAnalyzer):
     def _getmsgdata(event):
         return event["spdqdata"]
 
-    def append2results(self, rawmsgstr):
+    @staticmethod
+    def _getevents(rawmsgstr):
         rawmsg = json.loads(rawmsgstr)
-        if "spdq" not in rawmsg.keys():
-            raise SpardaqusMessageParseError
-        if "data" not in  rawmsg["spdq"].keys():
-            raise SpardaqusMessageParseError
-        eventlist = rawmsg["spdq"]["data"]
-        if type(eventlist) is not list:
-            raise SpardaqusMessageParseError
-        if type(eventlist[0]) is not dict:
-            raise SpardaqusMessageParseError
+        return rawmsg["spdq"]["data"]
+
+    def _append2results(self, rawmsgstr):
+        eventlist = self._getevents(rawmsgstr)
         if self.results.columns.empty:
             self.results = pd.DataFrame(columns=eventlist[0].keys())
         df = pd.json_normalize(eventlist, max_level=0)
@@ -136,7 +134,7 @@ class Greatexpectations(SpardaqusAnalyzer):
                         exception("Exception during analysis: %s" % str(e))
                 if exit_thread or globals.KILLSIG:
                     break
-                self.append2results(rawmsg)
+                self._append2results(rawmsg)
                 instrumentation.increment()
                 rawmsg = None
                 if 0 < self.engine.options.limit <= instrumentation.counter:
@@ -144,8 +142,14 @@ class Greatexpectations(SpardaqusAnalyzer):
                     info("--limit value (%d) reached" % self.engine.options.limit)
                     break
             if instrumentation.counter > 0:
-                print(tabulate(self.results, headers='keys', tablefmt='psql'))
+                print(tabulate(self.results, tablefmt='psql'))
+                if self.engine.options.profile:
+                    print("Total analysis dataframe memory usage: %d MB" % self.dataframe_memory_used_mb)
         self.close()
+
+    @property
+    def dataframe_memory_used_mb(self):
+        return self.results.memory_usage(index=True).sum() / 1024.0 / 1024.0
 
     def analyze(self, **kwargs):
         return
