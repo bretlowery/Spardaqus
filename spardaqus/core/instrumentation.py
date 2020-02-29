@@ -68,13 +68,15 @@ class Instrumentation:
             self._last = self._now
         if self._now % 30 == 0:
             self.avgrps = sum(self._counters) / len(self._counters) if len(self._counters) > 0 else 0.0
-            j = min(self._counters)
-            if j < self.minrps:
-                self.minrps = j
-            j = max(self._counters)
-            if j > self.maxrps:
-                self.maxrps = j
-
+            try:
+                j = min(self._counters)
+                if j < self.minrps:
+                    self.minrps = j
+                j = max(self._counters)
+                if j > self.maxrps:
+                    self.maxrps = j
+            except ValueError:
+                pass
 
 class InstrumentationCollection:
 
