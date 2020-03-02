@@ -29,3 +29,6 @@ class SpardaqusMessageParseError(ValueError):
 class SpardaqusTransportError(RuntimeError):
     pass
 
+
+class SpardaqusMessageCRCMismatchError(ValueError):
+    pass

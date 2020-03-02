@@ -128,7 +128,7 @@ class Kafka(SpardaqusTransport):
             msg = msgenvelope
             msg["spdq"]["data"] = [dict(data)]   # convert OrderedDict to dict, then listify
             msg["spdq"]["meta"]["sent"] = datetime.datetime.now().isoformat()
-           # msg["spdq"]["crc"] = crc(msg["spdq"]["meta"], msg["spdq"]["data"])
+            msg["spdq"]["crc"] = crc(msg["spdq"]["meta"], msg["spdq"]["data"])
             return json.dumps(msg)
 
         que = argstuple[0]
