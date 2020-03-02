@@ -9,6 +9,7 @@ import yaml
 from yaml.resolver import Resolver
 
 from loguru import logger
+import pyhash
 
 from spardaqus import globals
 
@@ -141,6 +142,11 @@ def boolish(val) -> bool:
         return val
 
 
+def crc(val1: str or dict or list, val2: str or dict or list) -> str:
+    hasher = pyhash.fnv1a_64()
+    return str(hasher(str(val1)) ^ hasher(str(val1)))
+
+
 def containsdupevalues(structure) -> bool or None:
     """Returns True if the passed dict has duplicate items/values, False otherwise. If the passed structure is not a dict, returns None."""
     if isinstance(structure, dict):
@@ -159,15 +165,6 @@ def containsdupevalues(structure) -> bool or None:
 def debugging() -> bool:
     """ Returns True if running in a IDE's debugging environment/mode, False otherwise."""
     return sys.gettrace() is not None
-
-
-def getenviron(key: str, defaultvalue: str or int or bool or None = None) -> str or int or bool or None:
-    k = key.upper()
-    try:
-        v = os.environ[k]
-    except KeyError:
-        v = defaultvalue
-    return v
 
 
 def error(msg: str, onerrorexit: bool = True) -> None:
@@ -215,6 +212,18 @@ def getconfig(
                        intrange=intrange,
                        quotestrings=quotestrings,
                        converttolist=converttolist)
+
+
+
+
+def getenviron(key: str, defaultvalue: str or int or bool or None = None) -> str or int or bool or None:
+    """Return the value of the named environment variable."""
+    k = key.upper()
+    try:
+        v = os.environ[k]
+    except KeyError:
+        v = defaultvalue
+    return v
 
 
 def info(msg: str) -> None:
@@ -503,3 +512,5 @@ def xlatearg(argval: str) -> str:
     if arg in ["analyze", "analysis"]:
         arg = "analyze"
     return arg
+
+
