@@ -154,10 +154,10 @@ class Splunk(SpardaqusEndpoint):
         if lookup:
             query = "%s search %s" % (self.query_comment, boxed_subquery)
         else:
-            query = "%s search %s | eval spdqx=[ tstats count where (%s _time >= %s _time <= %s) by _time span=1s | streamstats sum(count) AS totalcount global=t " \
+            query = "%s search %s | eval spdqstop=[ tstats count where (%s _time >= %s _time <= %s) by _time span=1s | streamstats sum(count) AS totalcount global=t " \
                     "| eval offset=totalcount - %d | where offset > 0 | sort offset asc | head 1 | rename _time AS xq " \
                     "| appendpipe [ stats count as xq | where xq==0 ] | return $xq ] " \
-                    "| where(_time <= spdqx) " \
+                    "| where(_time <= spdqstop) " \
                     % (self.query_comment,
                        boxed_subquery,
                        main_subquery,
@@ -208,7 +208,6 @@ class Splunk(SpardaqusEndpoint):
             with thread_context:
                 with instrumentation:
                     try:
-                        # for r in results.ResultsReader(io.BufferedReader(SpardaqusStreamBuffer(self.source.jobs.export(query, **kwargs_export)))):
                         for r in results.ResultsReader(io.BufferedReader(self.source.jobs.export(query, **kwargs_export))):
                             if globals.KILLSIG:
                                 break
