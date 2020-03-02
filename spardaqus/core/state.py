@@ -12,8 +12,8 @@ class Redis:
         self.connection = redis.Redis(host=self.host, port=self.port, db=self.db)
         self.pipeline = self.connection.pipeline()
 
-    def connectionerror(self, ce):
-        error("State control failed; connection refused or dropped to Redis at %s:%d: %s" % (self.host, self.post, str(ce)))
+    def error(self, ce):
+        error("State control failed; connection refused or dropped to Redis at %s:%d: %s" % (self.host, self.port, str(ce)))
 
     def set(self, key, val):
         """Write a value to a Redis key."""
@@ -22,14 +22,14 @@ class Redis:
         try:
             self.pipeline.set(key, str(val.strip()).encode('utf-8'))
         except ConnectionError as ce:
-            self.connectionerror(ce)
+            self.error(ce)
 
     def commit(self):
         """Commit a Redis transaction."""
         try:
             return self.pipeline.execute()
         except ConnectionError as ce:
-            self.connectionerror(ce)
+            self.error(ce)
 
     def get(self, key):
         """Read a value from a Redis key."""
@@ -37,7 +37,7 @@ class Redis:
         try:
             v = self.connection.get(key)
         except ConnectionError as ce:
-            self.connectionerror(ce)
+            self.error(ce)
         if not v:
             return None
         elif v.lower() == "none":
@@ -50,5 +50,5 @@ class Redis:
         try:
             self.connection.delete(key)
         except ConnectionError as ce:
-            self.connectionerror(ce)
+            self.error(ce)
 
