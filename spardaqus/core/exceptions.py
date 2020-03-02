@@ -24,3 +24,8 @@ class SpardaqusSparkSQLStructMissingRequiredElementsError(ValueError):
 
 class SpardaqusMessageParseError(ValueError):
     pass
+
+
+class SpardaqusTransportError(RuntimeError):
+    pass
+

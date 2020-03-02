@@ -8,6 +8,7 @@ from service import Service as SystemService, find_syslog
 from time import sleep
 
 from spardaqus import globals
+from spardaqus.core.exceptions import SpardaqusTransportError
 from spardaqus.core.instrumentation import InstrumentationManager
 import spardaqus.core.profiling as profile
 from spardaqus.core.utils import \
@@ -163,11 +164,16 @@ class SpardaqusService(SystemService):
                             sleep(int(self.engine.endpoint.on_no_results_wait_interval))
                     self.engine.transport.close()
                     self.engine.endpoint.close()
+            else:
+                raise SpardaqusTransportError
             if self.engine.options.profile:
                 profile.end(pstats_file)
             #
             #
             #
+        except SpardaqusTransportError:
+            error("Unable to establish a connection to %s at %s" % (self.engine.transport.integration_capitalized, self.engine.transport.target))
+            pass
         except Exception as e:
             exception("Exception in %s: %s" % (self.name, str(e)))
         finally:

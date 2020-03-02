@@ -6,13 +6,16 @@ import string
 import subprocess
 from time import sleep
 
-from confluent_kafka import KafkaException, KafkaError, Producer, Consumer
+from confluent_kafka import Producer
+from confluent_kafka import Consumer
+from confluent_kafka import KafkaException
+from confluent_kafka import KafkaError
 
 from spardaqus import globals
 from spardaqus.core.decorators import timeout_after
 from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired
 from spardaqus.core.metaclasses import SpardaqusTransport
-from spardaqus.core.utils import istruthy, mergedicts, getenviron, info, error, exception
+from spardaqus.core.utils import istruthy, mergedicts, getenviron, info, error, exception, crc
 
 
 class Kafka(SpardaqusTransport):
@@ -75,6 +78,7 @@ class Kafka(SpardaqusTransport):
 
     def connect(self):
         """Connect to the Kafka instance specified in the extract.yaml's (when extracting) or analyze.yaml's (when analyzing) Kafka connection settings."""
+        self.transporter = None
         if self.engine.worker == "extract":
             info("Connecting to %s transport server at %s as a publisher" % (self.integration_capitalized, self.target))
             self.transporter = Producer(**self.transporter_options)
@@ -90,13 +94,14 @@ class Kafka(SpardaqusTransport):
         dummy = self.transporter.list_topics(self.bucket)  # this will timeout if Kafka is down
         return True                                        # if the prev statement didn't timeout we are connected
 
+
     @property
     def connected(self):
         """Returns True if connected to Kafka, False otherwise."""
+        is_connected = False
         try:
             is_connected = self._chkconnection()
         except:
-            is_connected = False
             pass
         return is_connected
 
@@ -119,11 +124,12 @@ class Kafka(SpardaqusTransport):
             if err is not None:
                 raise KafkaException(err)
 
-        def _packit(data, envelope):
-            packit = envelope
-            packit["spdq"]["data"] = [dict(data)]   # convert OrderedDict to dict, then listify
-            packit["spdq"]["meta"]["sent"] = datetime.datetime.now().isoformat()
-            return json.dumps(packit)
+        def _packit(data, msgenvelope):
+            msg = msgenvelope
+            msg["spdq"]["data"] = [dict(data)]   # convert OrderedDict to dict, then listify
+            msg["spdq"]["meta"]["sent"] = datetime.datetime.now().isoformat()
+           # msg["spdq"]["crc"] = crc(msg["spdq"]["meta"], msg["spdq"]["data"])
+            return json.dumps(msg)
 
         que = argstuple[0]
         n = argstuple[1]
