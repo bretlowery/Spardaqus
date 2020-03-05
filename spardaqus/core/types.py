@@ -1,3 +1,4 @@
+from enum import Enum, unique
 import socket
 
 from pyspark.sql.types import StringType, StructType, ArrayType
@@ -107,3 +108,9 @@ class SpardaqusMessage:
             self.query_fragment = None
 
 
+@unique
+class SpardaqusTransportStatus(Enum):
+    STARTING = 0
+    EMPTY = 1
+    WAITEXPIRED = 2
+    PROCESSING = 3
