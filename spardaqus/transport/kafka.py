@@ -13,8 +13,9 @@ from confluent_kafka import KafkaError
 
 from spardaqus import globals
 from spardaqus.core.decorators import timeout_after
-from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired
+from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired, SpardaqusMessageCRCMismatchError
 from spardaqus.core.metaclasses import SpardaqusTransport
+from spardaqus.core.types import SpardaqusTransportStatus
 from spardaqus.core.utils import istruthy, mergedicts, getenviron, info, error, exception, crc
 
 
@@ -23,6 +24,7 @@ class Kafka(SpardaqusTransport):
     def __init__(self, engine):
         self.engine = engine
         super().__init__(self.__class__.__name__)
+        self.status = SpardaqusTransportStatus.EMPTY
         self.target = self.config("bootstrap.servers", required=True)
         self.groupid = self.config("group.id", required=True, intrange=[0, 999], defaultvalue=0)
         self.multithread = istruthy(self.config("multithread", required=False, defaultvalue=True))
@@ -59,6 +61,7 @@ class Kafka(SpardaqusTransport):
         self.bucket = self.getbucket()
         self.timeoutmsg = "%s operation failed: connection refused by %s at %s" % (self.engine.options.operation.capitalize(), self.integration_capitalized, self.target)
         self.maxwait = self.config("maxwait", required=False, defaultvalue=0)
+        self.state = SpardaqusTransportStatus.STARTING
 
     def getbucket(self):
         config_bucket = self.config("topic", required=False, defaultvalue=None)
@@ -120,15 +123,17 @@ class Kafka(SpardaqusTransport):
         :param argstuple:
         :return:
         """
+        envelope = self.engine.service.message_schema.json_envelope
+
         def __kafkacallback(err, msg):
             if err is not None:
                 raise KafkaException(err)
 
-        def _packit(data, msgenvelope):
-            msg = msgenvelope
+        def _packit(data):
+            msg = envelope
             msg["spdq"]["data"] = [dict(data)]   # convert OrderedDict to dict, then listify
-            msg["spdq"]["meta"]["sent"] = datetime.datetime.now().isoformat()
-            msg["spdq"]["crc"] = crc(msg["spdq"]["meta"], msg["spdq"]["data"])
+            msg["spdq"]["meta"]["sent"] = datetime.datetime.now().isoformat()[:19]
+            # msg["spdq"]["crc"] = crc(msg["spdq"]["meta"], msg["spdq"]["data"])
             return json.dumps(msg)
 
         que = argstuple[0]
@@ -137,7 +142,6 @@ class Kafka(SpardaqusTransport):
         self.engine.service.instrumenter.register(groupname=self.integration)
         info("Starting %s" % thread_name)
         instrumentation = self.engine.service.instrumenter.get(thread_name)
-        envelope = self.engine.service.message_schema.json_envelope
         wait_ticks = 0
         rawmsg = None
         exit_thread = False
@@ -156,6 +160,7 @@ class Kafka(SpardaqusTransport):
                                 ):
                             exit_thread = True
                             break
+                        self.status = SpardaqusTransportStatus.EMPTY
                         rawmsg = None
                         sleep(1)
                         wait_ticks += 1
@@ -163,15 +168,17 @@ class Kafka(SpardaqusTransport):
                             raise SpardaqusWaitExpired
                         pass
                     except SpardaqusWaitExpired:
+                        self.status = SpardaqusTransportStatus.WAITEXPIRED
                         info("Max %ds wait time for new messages exceeded; exiting" % self.maxwait)
                         exit_thread = True
                         pass
                 if exit_thread or globals.KILLSIG:
                     break
+                self.status = SpardaqusTransportStatus.PROCESSING
                 wait_ticks = 0
                 try:
                     # send data
-                    encoded_packet = _packit(rawmsg, envelope)
+                    encoded_packet = _packit(rawmsg)
                     self.transporter.produce(self.bucket, encoded_packet, on_delivery=__kafkacallback)
                     self.transporter.poll(0)
                     instrumentation.increment()
@@ -223,7 +230,10 @@ class Kafka(SpardaqusTransport):
                     while True:
                         rawmsg = self._poll()
                         if rawmsg:
+                            self.status = SpardaqusTransportStatus.PROCESSING
                             msg = rawmsg.value().decode(self.engine.encoding)
+                            #if msg["spdq"]["crc"] != crc(msg["spdq"]["meta"], msg["spdq"]["data"]):
+                            #    raise SpardaqusMessageCRCMismatchError
                             que.put(msg) if que else print(msg)
                             instrumentation.increment()
                             wait_ticks = 0
@@ -240,11 +250,15 @@ class Kafka(SpardaqusTransport):
                             break
                         if 0 < self.maxwait < wait_ticks:
                             raise SpardaqusWaitExpired
+                except SpardaqusMessageCRCMismatchError:
+                    pass
                 except SpardaqusWaitExpired:
+                    self.status = SpardaqusTransportStatus.WAITEXPIRED
                     info("Max %ds wait time for new messages exceeded; exiting" % self.maxwait)
                     exit_thread = True
                     pass
                 except SpardaqusTimeout:
+                    self.status = SpardaqusTransportStatus.EMPTY
                     exit_thread = True
                     pass
                 except KafkaException as kx:
