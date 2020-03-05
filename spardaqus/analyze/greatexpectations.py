@@ -17,6 +17,7 @@ from spardaqus import globals
 from spardaqus.core.decorators import timeout_after
 from spardaqus.core.exceptions import SpardaqusTimeout, SpardaqusWaitExpired, SpardaqusMessageParseError, SpardaqusMessageCRCMismatchError
 from spardaqus.core.metaclasses import SpardaqusAnalyzer
+from spardaqus.core.types import SpardaqusTransportStatus
 from spardaqus.core.utils import boolish,\
     crc, \
     error,\
@@ -74,7 +75,6 @@ class Greatexpectations(SpardaqusAnalyzer):
         self.limit_reached = False
         self.results = pd.DataFrame()
 
-
     @property
     def connected(self):
         return True
@@ -112,11 +112,14 @@ class Greatexpectations(SpardaqusAnalyzer):
                         try:
                             rawmsg = self.engine.service.que.get_nowait()
                         except QueueEmpty:
-                            if globals.KILLSIG or \
-                                    (instrumentation.counter >= 1 and (
+                            if globals.KILLSIG \
+                                or self.engine.transport.status == SpardaqusTransportStatus.EMPTY \
+                                or self.engine.transport.status == SpardaqusTransportStatus.WAITEXPIRED \
+                                or (instrumentation.counter >= 1
+                                    and (
                                             0 < self.engine.options.limit <= instrumentation.counter
                                             or self.engine.options.command == 'stop'
-                                    )
+                                        )
                                     ):
                                 exit_thread = True
                                 break
@@ -134,17 +137,20 @@ class Greatexpectations(SpardaqusAnalyzer):
                         exception("Exception during analysis: %s" % str(e))
                 if exit_thread or globals.KILLSIG:
                     break
-                self._append2results(rawmsg)
-                instrumentation.increment()
+                if rawmsg:
+                    self._append2results(rawmsg)
+                    instrumentation.increment()
                 rawmsg = None
                 if 0 < self.engine.options.limit <= instrumentation.counter:
                     self.limit_reached = True
                     info("--limit value (%d) reached" % self.engine.options.limit)
                     break
             if instrumentation.counter > 0:
-                print(tabulate(self.results, tablefmt='psql'))
+                print(tabulate(self.results, tablefmt='psql', headers="keys"))
                 if self.engine.options.profile:
                     print("Total analysis dataframe memory usage: %d MB" % self.dataframe_memory_used_mb)
+            elif self.engine.transport.status == SpardaqusTransportStatus.EMPTY:
+                info("Nothing found in queue to dump analyze")
         self.close()
 
     @property
