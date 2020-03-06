@@ -28,9 +28,9 @@ def timeout_after(timeout_interval=None, timeout_message=None):
         def inner(*args, **kwargs):
             try:
                 # if timeout_interval is not passed, use the encapsulating class's self.timeout property, if specified
-                maxtime = timeout_interval if timeout_interval else args[0].timeout if args[0].timeout else 30
+                maxtime = timeout_interval if timeout_interval else args[0].timeout if args[0].timeout else 0
             except:
-                maxtime = timeout_interval if timeout_interval else 30
+                maxtime = timeout_interval if timeout_interval else 0
                 pass
             try:
                 # if timeout_message is not passed, use the encapsulating class's self.timeoutmsg property, if specified
@@ -38,25 +38,28 @@ def timeout_after(timeout_interval=None, timeout_message=None):
             except:
                 timeoutmsg = timeout_message if timeout_message else None
                 pass
-            q = Queue()
-            results = None
-            timer = threading.Timer(maxtime, _ontimeout, args=[q])
-            timed_thread = threading.Thread(target=_call, args=[timer, q, fn, args, kwargs])
-            timed_thread.start()
-            while timer and not results:
-                try:
-                    results = q.get_nowait()
-                except QueueEmpty:
-                    pass
-            if timer:
-                timer.cancel()
-            q.task_done()
-            if results:
-                if isinstance(results, str):
-                    if results == "TIMEDOUT":
-                        if timeoutmsg:
-                            info(timeoutmsg)
-                        raise SpardaqusTimeout
+            if maxtime == 0:
+                results = fn(*args, **kwargs)
+            else:
+                q = Queue()
+                results = None
+                timer = threading.Timer(maxtime, _ontimeout, args=[q])
+                timed_thread = threading.Thread(target=_call, args=[timer, q, fn, args, kwargs])
+                timed_thread.start()
+                while timer and not results:
+                    try:
+                        results = q.get_nowait()
+                    except QueueEmpty:
+                        pass
+                if timer and maxtime > 0:
+                    timer.cancel()
+                q.task_done()
+                if results:
+                    if isinstance(results, str):
+                        if results == "TIMEDOUT":
+                            if timeoutmsg:
+                                info(timeoutmsg)
+                            raise SpardaqusTimeout
             return results
         return inner
     return outer

@@ -28,17 +28,11 @@ class SpardaqusIntegration:
         self.name = "SpardaqusGenericService"
         self.on_no_results = "exit"
         self.results = None
+        self.timeout = None
+        self.timeoutmsg = None
 
     @abstractattribute
     def integration(self):
-        pass
-
-    @abstractattribute
-    def timeout(self):
-        pass
-
-    @abstractattribute
-    def timeoutmsg(self):
         pass
 
     def config(self, setting, required=False, defaultvalue=0, choices=None, intrange=None, quotestrings=False, converttolist=False):
@@ -231,7 +225,6 @@ class SpardaqusTransport(SpardaqusIntegration):
         self.transporter_options = None
         self.target = None
         self.threads = None
-        self.timeoutmsg = None
         return
 
 

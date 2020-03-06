@@ -36,15 +36,15 @@ class Greatexpectations(SpardaqusAnalyzer):
     def __init__(self, engine):
         self.engine = engine
         super().__init__(self.__class__.__name__)
-        self.target = self.config("master", required=True)
         self.bucket = self.getbucket()
         self.session = None
         self.limit_reached = False
         self.results_returned = True
-        self.timeoutmsg = "%s operation failed: connection refused by %s at %s" \
-                          % (self.engine.options.operation.capitalize(), self.integration_capitalized, self.target)
+        self.timeoutmsg = "%s operation failed: connection refused by %s" \
+                          % (self.engine.options.operation.capitalize(), self.integration_capitalized)
         self.thread_count = 1
         self.maxwait = self.config("maxwait", required=False, defaultvalue=0)
+        self.timeout = self.maxwait
 
     def _getthreadcontext(self):
         multithread = istruthy(self.config("multithread", required=False, defaultvalue=True))
@@ -100,6 +100,10 @@ class Greatexpectations(SpardaqusAnalyzer):
         self.results = pd.concat([self.results, df], axis=0)
         return
 
+    @timeout_after(timeout_interval=None, timeout_message="Max wait time for first message exceeded")
+    def _get(self, instrumentation_counter):
+        return self.engine.service.que.get() if instrumentation_counter == 0 else self.engine.service.que.get_nowait()
+
     def dump(self):
         instrumentation = self.engine.service.instrumenter.get("GreatExpectationsDump")
         wait_ticks = 0
@@ -110,7 +114,10 @@ class Greatexpectations(SpardaqusAnalyzer):
                 while not rawmsg:
                     try:
                         try:
-                            rawmsg = self.engine.service.que.get_nowait()
+                            rawmsg = self._get(instrumentation.counter)
+                        except SpardaqusTimeout:
+                            exit_thread = True
+                            break
                         except QueueEmpty:
                             if globals.KILLSIG \
                                 or self.engine.transport.status == SpardaqusTransportStatus.EMPTY \
@@ -140,11 +147,11 @@ class Greatexpectations(SpardaqusAnalyzer):
                 if rawmsg:
                     self._append2results(rawmsg)
                     instrumentation.increment()
-                rawmsg = None
-                if 0 < self.engine.options.limit <= instrumentation.counter:
-                    self.limit_reached = True
-                    info("--limit value (%d) reached" % self.engine.options.limit)
-                    break
+                    rawmsg = None
+                    if 0 < self.engine.options.limit <= instrumentation.counter:
+                        self.limit_reached = True
+                        info("--limit value (%d) reached" % self.engine.options.limit)
+                        break
             if instrumentation.counter > 0:
                 print(tabulate(self.results, tablefmt='psql', headers="keys"))
                 if self.engine.options.profile:
@@ -152,6 +159,7 @@ class Greatexpectations(SpardaqusAnalyzer):
             elif self.engine.transport.status == SpardaqusTransportStatus.EMPTY:
                 info("Nothing found in queue to dump analyze")
         self.close()
+        
 
     @property
     def dataframe_memory_used_mb(self):
