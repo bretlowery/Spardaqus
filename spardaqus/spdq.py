@@ -17,6 +17,7 @@ from spardaqus.core.utils import \
     error, \
     istruthy, \
     printmsg, \
+    writable_path, \
     xlatearg
 
 
@@ -45,58 +46,80 @@ class SpardaqusEngine:
                          noneisnone=noneisnone)
 
     def __init__(self):
-        argz = argparse.ArgumentParser(usage="spardaquscmd "
+        self.argz = argparse.ArgumentParser(usage="spardaquscmd "
                                              "[options] "
                                              "["
                                                 "[start | stop | interactive] [extract | analyze]"
                                                 " | "
-                                                "dump [extract | analyze | transport [fromextract | fromanalyze]"
+                                                "dump [extract | analyze | transport ] [stdout | 'outputfile']"
                                              "]")
-        argz.add_argument("command",
+        self.argz.add_argument("command",
                           nargs='?',
                           default=None)
-        argz.add_argument("operation",
+        self.argz.add_argument("operation",
                           nargs='?',
                           default=None)
-        argz.add_argument("option",
+        self.argz.add_argument("output",
                           nargs='?',
-                          default="none")
-        argz.add_argument("--init",
+                          default="stdout")
+        self.argz.add_argument("--init",
                           action="store_true",
-                          dest="init"
-                          )
-        argz.add_argument("--limit",
+                          dest="init")
+        self.argz.add_argument("--limit",
                           action="store",
                           type=int,
                           dest="limit",
-                          default=0
-                          )
-        argz.add_argument("--profile",
+                          default=0)
+        self.argz.add_argument("--profile",
                           action="store_true",
                           dest="profile",
-                          default=False
-                          )
-        argz.add_argument("--logfile",
+                          default=False)
+        self.argz.add_argument("--logfile",
                           action="store",
                           dest="logfile",
-                          default=""
-                          )
-        argz.add_argument("--quiet",
+                          default="")
+        self.argz.add_argument("--quiet",
                           action="store_true",
                           dest="quiet",
-                          default=False
-                          )
-        argz.add_argument("--debug",
+                          default=False)
+        self.argz.add_argument("--debug",
                           action="store_true",
                           dest="debug",
-                          default=False
-                          )
-        self.options = argz.parse_args()
+                          default=False)
+        self.argz.add_argument("--dumpdelimiter",
+                          action="store",
+                          dest="delimiter",
+                          default="\t")
+        self.argz.add_argument("--dumpvalueifmissing",
+                          action="store",
+                          dest="ifmissing",
+                          default="?")
+        self.argz.add_argument("--dumpfloatformat",
+                          action="store",
+                          dest="floatformat",
+                          default=None)
+        self.argz.add_argument("--dumpindex",
+                          action="store_true",
+                          dest="index",
+                          default=False)
+        self.argz.add_argument("--dumpcompression",
+                          action="store",
+                          dest="compression",
+                          default="infer")
+        self.argz.add_argument("--dumpquotechar",
+                          action="store",
+                          dest="quotechar",
+                          default="\"")
+        self.argz.add_argument("--dumpterminator",
+                          action="store",
+                          dest="line_terminator",
+                          default="\n")
+        self.options = self.argz.parse_args()
         try:
             self.options.command = xlatearg(self.options.command)
             self.options.operation = xlatearg(self.options.operation)
-            self.options.option = xlatearg(self.options.option)
             self.options.logfile = self.options.logfile.strip()
+            self.options.output = self.options.output.strip()
         except IndexError:
             self.options.command = None
             self.name = None
@@ -109,8 +132,6 @@ class SpardaqusEngine:
         self.scrub_inputs()
         self.init_logging()
         info("Halting Spardaqus") if self.options.command == "stop" else info("Initializing Spardaqus")
-        #if self.options.profile:
-        #    profile.memory()
         if debugging():
             info("Debugging mode detected")
         self.create_service_topology()
@@ -148,38 +169,26 @@ class SpardaqusEngine:
 
     def scrub_inputs(self):
         if not self.options.command or not self.options.operation:
-            error("Insufficient arguments provided")
+            error("Insufficient arguments provided", call=self.argz.print_help())
         if self.options.command not in ['start', 'stop', 'interactive', 'dump']:
-            error("Invalid command '%s'; must be one of: 'start', 'stop', 'interactive', 'dump'" % self.options.command)
+            error("Invalid command '%s'; must be one of: 'start', 'stop', 'interactive', 'dump'" % self.options.command, call=self.argz.print_help())
         elif self.options.command in ['start', 'stop', 'interactive']:
             if self.options.operation not in ['extract', 'analyze']:
-                error("Invalid operation '%s' for command '%s' provided; must be one of: 'extract', 'analyze'" % (self.options.operation, self.options.command))
+                error("Invalid operation '%s' for command '%s' provided; must be one of: 'extract', 'analyze'" % (self.options.operation, self.options.command), call=self.argz.print_help())
         elif self.options.command == "dump":
             if self.options.operation not in ['extract', 'analyze', 'transport']:
-                error("Invalid dump operation '%s' provided; must be one of: 'extract', 'analyze', 'transport'" % self.options.operation)
-        if self.options.option:
-            if self.options.command in ['dump']:
-                if self.options.operation in ['transport']:
-                    if self.options.option not in ['fromextract', 'fromanalyze']:
-                        if self.options.option == "none":
-                            error("Either 'fromextract' or 'fromanalyze' must be specified when using dump transport")
-                        else:
-                            error("Invalid dump transport option '%s' provided; must be either 'fromextract' or 'fromanalyze'" % self.options.option)
-                elif self.options.option not in ['none']:
-                    error("Invalid or incomplete dump option '%s' provided" % self.options.option)
-            elif self.options.option not in ['none']:
-                error("Invalid or incomplete option '%s' provided" % self.options.option)
-        elif self.options.command in ['dump'] and self.options.operation in ['transport']:
-            error("Either 'fromextract' or 'fromanalyze' must be specified when using dump transport")
+                error("Invalid dump operation '%s' provided; must be one of: 'extract', 'analyze', 'transport'" % self.options.operation, call=self.argz.print_help())
         if self.options.command in ["dump"]:
             if self.options.operation in ['transport']:
                 self.worker = "dumptransport"
-                if self.options.option == 'fromanalyze':
-                    self.options.operation = "analyze"
-                elif self.options.option == 'fromextract':
-                    self.options.operation = "extract"
+                self.options.operation = "analyze"
             else:
                 self.worker = "dump%s" % self.options.operation
+            if self.options.output != "stdout":
+                if not writable_path(self.options.output):
+                    error("'%s' is not a valid dump output file path and/or name." % self.options.output)
+        elif self.options.output != "stdout":
+            error("Invalid commandline options specified", call=self.argz.print_help())
         else:
             self.worker = self.options.operation
 

@@ -167,8 +167,10 @@ def debugging() -> bool:
     return sys.gettrace() is not None
 
 
-def error(msg: str, onerrorexit: bool = True) -> None:
+def error(msg: str, onerrorexit: bool = True, call=None) -> None:
     """ Standard error logging. """
+    if call:
+        call()
     logger.error(msg)
     if onerrorexit:
         globals.KILLSIG = True
@@ -508,9 +510,46 @@ def wipe(file: str) -> None:
 def xlatearg(argval: str) -> str:
     """ Normalize multiple argument values to a single canonical value.
     Allows acceptible variants that mean the same thing: e.g., analyze or analysis --> analyze."""
-    arg = argval.strip().lower()
-    if arg in ["analyze", "analysis"]:
-        arg = "analyze"
+    arg = None
+    if argval:
+        arg = argval.strip().lower()
+        if arg in ["analyze", "analysis"]:
+            arg = "analyze"
     return arg
 
+
+def _is_pathname_valid(path: str) -> bool:
+    is_valid = True
+    try:
+        if not isinstance(path, str) or not path:
+            return False
+        root = os.path.sep
+        root = root.rstrip(os.path.sep) + os.path.sep
+        for part in path.split(os.path.sep):
+            if part:
+                root = os.path.join(root, part)
+                try:
+                    os.lstat(root)
+                except OSError as exc:
+                    is_valid = False
+                    pass
+                if not is_valid:
+                    break
+    except TypeError as exc:
+        is_valid = False
+        pass
+    return is_valid
+
+
+def _is_path_creatable(path: str) -> bool:
+    path = os.path.dirname(path) or os.getcwd()
+    return os.access(path, os.W_OK)
+
+
+def writable_path(path: str) -> bool:
+    path = os.path.dirname(path)
+    try:
+        return _is_pathname_valid(path) and (os.path.exists(path) or _is_path_creatable(path))
+    except OSError:
+        return False
 

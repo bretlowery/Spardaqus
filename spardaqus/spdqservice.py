@@ -126,9 +126,16 @@ class SpardaqusService(SystemService):
                     logfile="",
                     loglevel="INFO",
                     profile=False,
-                    quiet=False
+                    quiet=False,
+                    delimiter="\t",
+                    ifmissing="?",
+                    floatformat=None,
+                    index=False,
+                    compression="infer",
+                    quotechar="\"",
+                    line_terminator="\n"
             )
-            # update default service settings with the entries in the spardaqus.yaml
+            # Update default service settings with the entries in the spardaqus.yaml. Config file overrides defaults.
             settings = getconfig("spardaqus", "config")
             for setting in settings:
                 setting = setting.strip().lower()
@@ -137,6 +144,8 @@ class SpardaqusService(SystemService):
                         options.__dict__[setting] = settings[setting]
                     except Exception as e:
                         error('Error loading setting "%s" from %s: %s' % (setting,  os.path.join(globals.ROOT_DIR, 'config/%s.yaml'), str(e)))
+            # Merge config file options with command line options. Commandline overrides both config file and defaults.
+            # Write all config overrides back into the self.engine.options dict for futher reference.
             self.engine.options.__dict__ = mergedicts(options.__dict__, self.engine.options.__dict__, overwrite=True)
             #
             # main work loop: everything Spardaqus does happens here

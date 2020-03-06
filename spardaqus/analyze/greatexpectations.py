@@ -28,7 +28,8 @@ from spardaqus.core.utils import boolish,\
     isreadable,\
     istruthy,\
     numcpus,\
-    setenviron
+    setenviron,\
+    wipe
 
 
 class Greatexpectations(SpardaqusAnalyzer):
@@ -57,14 +58,6 @@ class Greatexpectations(SpardaqusAnalyzer):
             thread_context = nullcontext()
         info("Number of analysis threads set to %d" % self.thread_count)
         return thread_context
-
-    def getbucket(self):
-        configbucket = self.config("topic", required=False, defaultvalue=None)
-        if configbucket and configbucket not in ["none", "default"]:
-            bucket = configbucket.strip().translate(str.maketrans(string.punctuation, '_' * len(string.punctuation)))
-        else:
-            bucket = 'spardaqus'
-        return bucket[:255]
 
     def connect(self, **kwargs):
         info("Starting %s analysis" % self.integration_capitalized)
@@ -153,7 +146,21 @@ class Greatexpectations(SpardaqusAnalyzer):
                         info("--limit value (%d) reached" % self.engine.options.limit)
                         break
             if instrumentation.counter > 0:
-                print(tabulate(self.results, tablefmt='psql', headers="keys"))
+                if self.engine.options.output == "stdout":
+                    print(tabulate(self.results, tablefmt='psql', headers="keys"))
+                else:
+                    self.results.to_csv(
+                            self.engine.options.output,
+                            mode="w",
+                            sep=self.engine.options.delimiter,
+                            na_rep=self.engine.options.ifmissing,
+                            float_format=self.engine.options.floatformat,
+                            header=True,
+                            index=self.engine.options.index,
+                            compression=self.engine.options.compression,
+                            quotechar=self.engine.options.quotechar,
+                            line_terminator=self.engine.options.line_terminator
+                            )
                 if self.engine.options.profile:
                     print("Total analysis dataframe memory usage: %d MB" % self.dataframe_memory_used_mb)
             elif self.engine.transport.status == SpardaqusTransportStatus.EMPTY:
