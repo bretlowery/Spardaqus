@@ -1,5 +1,3 @@
-import sys
-
 from spardaqus.core import utils
 from spardaqus.core.abstracts import ABCMeta, abstractmethod, abstractattribute
 
@@ -30,6 +28,8 @@ class SpardaqusIntegration:
         self.results = None
         self.timeout = None
         self.timeoutmsg = None
+        self.bucket = "undefined"
+        self.bucketname = None
 
     @abstractattribute
     def integration(self):
@@ -43,6 +43,14 @@ class SpardaqusIntegration:
             return utils.getconfig(self.engine.options.operation, self.integration, setting, required=required, defaultvalue=defaultvalue,
                                    choices=choices, intrange=intrange, quotestrings=quotestrings, converttolist=converttolist)
 
+    def getbucket(self):
+        configbucket = self.config("topic", required=False, defaultvalue=None)
+        if configbucket and configbucket not in ["none", "default"]:
+            bucket = configbucket.strip().translate(str.maketrans(string.punctuation, '_' * len(string.punctuation)))
+        else:
+            bucket = 'spardaqus'
+        return bucket[:255]
+
 
 class SpardaqusEndpoint(SpardaqusIntegration):
     """
@@ -50,14 +58,6 @@ class SpardaqusEndpoint(SpardaqusIntegration):
     adapter to an external provider that sends data to Spardaqus. Currently, only Splunk is supported for this.
     """
     __metaclass__ = ABCMeta
-
-    @abstractattribute
-    def bucket(self):
-        pass
-
-    @abstractattribute
-    def bucketname(self):
-        pass
 
     @abstractmethod
     def close(self, **kwargs):
@@ -121,8 +121,6 @@ class SpardaqusEndpoint(SpardaqusIntegration):
 
     def __init__(self, integration):
         super().__init__(integration)
-        self.bucket = "undefined"
-        self.bucketname = None
         self.connection_attempts = 0
         self.envelope = {}
         self.key = None
@@ -168,10 +166,6 @@ class SpardaqusTransport(SpardaqusIntegration):
 
     @abstractattribute
     def consumeroptions(self):
-        return
-
-    @abstractmethod
-    def getbucket(self):
         return
 
     @abstractattribute
@@ -239,14 +233,6 @@ class SpardaqusAnalyzer(SpardaqusIntegration):
     def analyze(self, **kwargs):
         return
 
-    @abstractattribute
-    def bucket(self):
-        pass
-
-    @abstractattribute
-    def bucketname(self):
-        pass
-
     @abstractmethod
     def connect(self, **kwargs):
         return
@@ -257,10 +243,6 @@ class SpardaqusAnalyzer(SpardaqusIntegration):
 
     @abstractmethod
     def dump(self, **kwargs):
-        return
-
-    @abstractmethod
-    def getbucket(self):
         return
 
     @abstractattribute

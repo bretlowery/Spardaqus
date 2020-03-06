@@ -63,14 +63,6 @@ class Kafka(SpardaqusTransport):
         self.maxwait = self.config("maxwait", required=False, defaultvalue=0)
         self.state = SpardaqusTransportStatus.STARTING
 
-    def getbucket(self):
-        config_bucket = self.config("topic", required=False, defaultvalue=None)
-        if config_bucket and config_bucket not in ["none", "default"]:
-            bucket = config_bucket.strip().translate(str.maketrans(string.punctuation, '_' * len(string.punctuation)))
-        else:
-            bucket = 'spardaqus'
-        return bucket[:255]
-
     @property
     def version(self):
         kafka_libs = os.path.join(getenviron("KAFKA_HOME"), "libs")

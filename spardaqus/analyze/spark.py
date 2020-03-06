@@ -44,14 +44,6 @@ class Spark(SpardaqusAnalyzer):
         self.spark_logging_level = self.config("logging.level", required=True, defaultvalue="ERROR",
                                                choices=["CRITICAL", "DEBUG", "ERROR", "FATAL", "INFO", "WARN", "WARNING", "OFF"]).upper()
 
-    def getbucket(self):
-        configbucket = self.config("topic", required=False, defaultvalue=None)
-        if configbucket and configbucket not in ["none", "default"]:
-            bucket = configbucket.strip().translate(str.maketrans(string.punctuation, '_' * len(string.punctuation)))
-        else:
-            bucket = 'spardaqus'
-        return bucket[:255]
-
     @property
     def schema(self):
         return self.engine.service.message_schema.sparksql
